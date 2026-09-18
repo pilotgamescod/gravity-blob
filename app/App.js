@@ -391,25 +391,25 @@ function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld 
           position: 'absolute', top: 0, left: 8, right: 8,
           height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.55)',
         }} />
-        {!asteroidWorld && <Text style={{ color: '#fff', fontSize: 11, textAlign: 'center', lineHeight: 14 }}>{{ moving: '↕', sweep: '×  TOCCA', soft: '≈  ≈  ≈', boost: '↑↑  ↑↑', crumble: '⋯ ⋯ ⋯' }[type] || '· · ·'}</Text>}
+        {!asteroidWorld && (!type || type === 'normal' || type === 'crumble') && <Text style={{ color: '#fff', fontSize: 11, textAlign: 'center', lineHeight: 14 }}>{type === 'crumble' ? '⋯ ⋯ ⋯' : '· · ·'}</Text>}
       </View>
-      {asteroidWorld && type === 'soft' && (
+      {type === 'soft' && (
         <View pointerEvents="none" style={{ position:'absolute', left:x, top:y-12, width:w, height:28 }}>
           {[.15,.38,.62,.82].map((fraction,i) => <View key={i} style={{ position:'absolute', left:w*fraction-14, top:i%2 ? 0 : 5, width:28, height:24, borderRadius:18, backgroundColor:i%2 ? '#f5fbff' : '#e1eef6' }} />)}
           <View style={{ position:'absolute', left:3, right:3, bottom:0, height:15, borderRadius:12, backgroundColor:'#e1eef6' }} />
         </View>
       )}
-      {asteroidWorld && type === 'moving' && (
+      {type === 'moving' && (
         <View pointerEvents="none" style={{ position:'absolute', left:x+8, top:y+6, width:w-16, flexDirection:'row', justifyContent:'space-between' }}>
           {[0,1,2].map(i => <View key={i} style={{ width:5, height:5, borderRadius:3, backgroundColor:'#f9e2bb', borderWidth:1, borderColor:'#5b462d' }} />)}
         </View>
       )}
-      {asteroidWorld && type === 'sweep' && (
+      {type === 'sweep' && (
         <View pointerEvents="none" style={{ position:'absolute', left:x, top:y, width:w, height:PLATFORM_H, flexDirection:'row', justifyContent:'space-evenly' }}>
           {[0,1,2,3].map(i => <View key={i} style={{ width:2, height:PLATFORM_H, backgroundColor:'#582936', transform:[{rotate:i%2 ? '-22deg' : '22deg'}] }} />)}
         </View>
       )}
-      {asteroidWorld && type === 'boost' && (
+      {type === 'boost' && (
         <View pointerEvents="none" style={{ position:'absolute', left:x+10, top:y+PLATFORM_H, width:w-20, flexDirection:'row', justifyContent:'space-around' }}>
           {[0,1,2].map(i => <View key={i} style={{ width:14, height:14 }}>
             {[0,1,2].map(j => <View key={j} style={{ position:'absolute', top:j*4, width:14, height:5, borderWidth:1.5, borderColor:'#b4f5d1', borderRadius:5 }} />)}
