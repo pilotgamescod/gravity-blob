@@ -28,7 +28,7 @@ I record per mondo, la mascotte e l'ultimo mondo scelto vengono salvati in `loca
 
 `public/index.html` sostituisce il template web di Expo: blocca lo zoom (pinch e doppio tocco) e aggiunge icona, manifest e meta tag per l'uso a schermo intero. Da Safari: Condividi → Aggiungi alla schermata Home.
 
-Deploy su Cloudflare Pages: comando di build `npx expo export --platform web`, cartella di output `dist`, directory radice `app`.
+Online su https://gravity-blob.nicoferretti-2.workers.dev (Cloudflare Workers, file statici). Per pubblicare una nuova versione: `npm run deploy` dalla cartella `app` (esporta in `dist` e carica con wrangler, configurato in `wrangler.jsonc`).
 
 ## Direzione artistica
 

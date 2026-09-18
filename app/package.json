@@ -19,7 +19,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "node --test tests/*.test.mjs",
-    "test:browser": "node scripts/check-browser.cjs"
+    "test:browser": "node scripts/check-browser.cjs",
+    "deploy": "expo export --platform web && npx wrangler deploy"
   },
   "private": true,
   "devDependencies": {
