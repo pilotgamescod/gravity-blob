@@ -1,0 +1,28 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "expo": "~57.0.20",
+    "expo-linear-gradient": "~57.0.1",
+    "expo-screen-orientation": "~57.0.2",
+    "expo-sensors": "~57.0.2",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-web": "^0.21.2"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "node scripts/check-browser.cjs"
+  },
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

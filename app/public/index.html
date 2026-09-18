@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- Niente zoom: né pinch né doppio tocco. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no" />
+    <title>%WEB_TITLE%</title>
+
+    <!-- Web app a schermo intero da Safari: Condividi → Aggiungi alla schermata Home -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Gravity Blob" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="theme-color" content="#f3eeff" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+    <style>
+      html,
+      body {
+        overscroll-behavior: none;
+        /* Consente lo scorrimento con un dito ma non pinch-zoom e doppio tocco */
+        touch-action: pan-x pan-y;
+        -webkit-text-size-adjust: 100%;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+    </style>
+    <script>
+      // Safari su iOS ignora user-scalable=no: blocchiamo i gesti di zoom a mano.
+      (function () {
+        var stop = function (e) { e.preventDefault(); };
+        document.addEventListener('gesturestart', stop, { passive: false });
+        document.addEventListener('gesturechange', stop, { passive: false });
+        document.addEventListener('gestureend', stop, { passive: false });
+        document.addEventListener('touchmove', function (e) {
+          if (e.touches.length > 1 || (e.scale !== undefined && e.scale !== 1)) e.preventDefault();
+        }, { passive: false });
+        document.addEventListener('dblclick', stop, { passive: false });
+      })();
+    </script>
+  </head>
+
+  <body>
+    <noscript>
+      Per giocare a Gravity Blob serve JavaScript.
+    </noscript>
+    <div id="root"></div>
+  </body>
+</html>
