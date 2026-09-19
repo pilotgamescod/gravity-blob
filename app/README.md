@@ -39,6 +39,14 @@ Ognuna ha una piccola abilità: rimbalzi più alti o più bassi, gravità divers
 
 Nell'album le mascotte mai trovate sono sagome; la scheda in alto mostra abilità, raccolte mancanti e mondi in cui cercarle. A fine partita compaiono le nuove trovate e quelle appena diventate giocabili. Una mascotte scelta prima di questa versione che non risulta ancora sbloccata torna a Blob viola.
 
+## Suoni
+
+Effetti sintetizzati al momento con la Web Audio API (`src/sound.js`), senza file audio. Ogni mondo ha una sua tonalità e un suo timbro. Il primo atterraggio su ogni piattaforma suona una nota di una scala pentatonica che sale con il combo; poi ci sono suoni per inversione, molle, nuvole, crolli, raccolta, moltiplicatore, combo perso, meteore (avviso, passaggio ravvicinato, scudo), eventi, sfida, fine partita, record e nuove mascotte giocabili.
+
+- Su iPhone l'audio si attiva al primo tocco e, come per ogni pagina web, rispetta l'interruttore silenzioso.
+- Il pulsante ♪ in alto a destra nel menu attiva o spegne i suoni; la scelta è salvata.
+- Nell'app nativa (Expo Go) i suoni non ci sono: le funzioni non fanno nulla senza Web Audio.
+
 ## Sblocco dei mondi
 
 Asteroidi si sblocca con 300 punti in Nebulosa, Buco nero con 450 in Asteroidi, Supernova con 600 in Buco nero: con un gioco medio servono circa 30–60 secondi nel mondo precedente, con combo alti meno. Un mondo sbloccato resta sbloccato; i salvataggi precedenti mantengono i mondi aperti con le vecchie soglie (40/60/80).

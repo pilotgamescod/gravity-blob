@@ -19,6 +19,7 @@ import { WorldScene, WORLD_ART } from './src/WorldScene';
 import { DeepSpace, MeteorField } from './src/DeepSpace';
 import { createMeteor, meteorPosition, meteorHitsPlayer, meteorNearMiss } from './src/meteors';
 import { createCombo, landCombo, passCombo, comboProgress, COMBO_STEPS } from './src/combo';
+import { sfx, unlockAudio, setSoundEnabled, setSoundWorld } from './src/sound';
 import { MASCOT_INFO, RARITY, mascotTraits, mascotNeed, isMascotUnlocked, mascotWorlds, addToAlbum } from './src/mascots';
 import { EVENTS, createDirector, updateDirector, endEvent, eventProgress, LOW_GRAVITY, LOW_GRAVITY_BOUNCE, RUSH_SPEED } from './src/events';
 import { loadProgress, saveProgress, requestPersistentStorage } from './src/storage';
@@ -510,7 +511,7 @@ function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld,
 // ── Start screen (Ride the Wave style) ──
 
 function StartScreen({
-  world, selectedWorldIdx, selectedMascot, worldScores, unlockedWorlds,
+  world, selectedWorldIdx, selectedMascot, worldScores, unlockedWorlds, soundOn, onToggleSound,
   onStart, onPrevWorld, onNextWorld, onDotPress,
   onCharacters, onProfile, locked,
 }) {
@@ -535,6 +536,14 @@ function StartScreen({
     <View style={{ flex: 1 }}>
       <LinearGradient colors={world.menuBg} style={StyleSheet.absoluteFill} />
       <MenuDecorations accent={world.accent} world={world} prominent />
+
+      {/* Sound toggle */}
+      <TouchableOpacity onPress={onToggleSound} activeOpacity={0.7}
+        accessibilityRole="button" accessibilityLabel={soundOn ? 'Disattiva i suoni' : 'Attiva i suoni'}
+        style={[ms.soundButton, { borderColor: world.cardBorder, backgroundColor: world.cardBg }]}>
+        <Text style={[ms.soundGlyph, { color: soundOn ? world.accent : world.eyebrowColor }]}>♪</Text>
+        {!soundOn && <View style={[ms.soundSlash, { backgroundColor: world.eyebrowColor }]} />}
+      </TouchableOpacity>
 
       {/* Profile button */}
       <View style={ms.profileButtonWrapper}>
@@ -975,6 +984,9 @@ export default function App() {
     Object.fromEntries(WORLDS.map(w => [w.id, Number(saved.worldScores?.[w.id]) || 0]))
   );
   const [bestCombo, setBestCombo] = useState(Number(saved.bestCombo) || 0);
+  const [soundOn, setSoundOn] = useState(saved.sound !== false);
+  useEffect(() => { setSoundEnabled(soundOn); }, [soundOn]);
+  const worldScoresRef = useRef(null);
   const [unlockedWorlds, setUnlockedWorlds] = useState(() => initialUnlocked(saved));
   // Un mondo sbloccato resta sbloccato.
   useEffect(() => {
@@ -983,9 +995,10 @@ export default function App() {
   }, [worldScores, unlockedWorlds]);
 
   useEffect(() => { requestPersistentStorage(); }, []);
+  worldScoresRef.current = worldScores;
   useEffect(() => {
-    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo, unlocked: unlockedWorlds, album });
-  }, [worldScores, selectedWorld, selectedMascot, bestCombo, unlockedWorlds, album]);
+    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo, unlocked: unlockedWorlds, album, sound: soundOn });
+  }, [worldScores, selectedWorld, selectedMascot, bestCombo, unlockedWorlds, album, soundOn]);
 
   const [score, setScore] = useState(0);
   const [playerY, setPlayerY] = useState(SCREEN_H * 0.5);
@@ -1041,6 +1054,8 @@ export default function App() {
     g.scoreClock = 0;
     g.course = createCourse(w, SCREEN_H);
     g.collected = [];
+    unlockAudio();
+    setSoundWorld(w.id);
     g.traits = mascotTraits(selectedMascot);
     g.combo = createCombo(g.traits.startCombo, g.traits.forgive);
     g.shield = g.traits.shield;
@@ -1088,6 +1103,7 @@ export default function App() {
       g.gravityDown = !g.gravityDown;
       g.velY = g.gravityDown ? g.world.gravity * 3 : -g.world.gravity * 3;
       g.onPlatform = false;
+      sfx.flip(g.gravityDown);
       setGravityDown(g.gravityDown);
       setFlipCount(c => c + 1);
     }
@@ -1099,6 +1115,7 @@ export default function App() {
     const plat = g.platforms.find(p => p.id === id && p.type === 'sweep');
     if (!plat) return;
     g.platforms = sweepPlatform(g.platforms, id);
+    sfx.sweep();
     setPlatforms([...g.platforms]);
     setBursts(prev => [...prev, { x: plat.x + plat.w / 2 - 20, y: plat.y - 20, id: Math.random() }]);
   }, []);
@@ -1107,6 +1124,8 @@ export default function App() {
     gameRef.current.running = false;
     const finalScore = gameRef.current.score;
     const wId = gameRef.current.world.id;
+    sfx.gameOver();
+    if (finalScore > 0 && finalScore > (worldScoresRef.current?.[wId] || 0)) setTimeout(() => sfx.record(), 650);
     setWorldScores(prev => ({
       ...prev,
       [wId]: Math.max(prev[wId], finalScore),
@@ -1117,6 +1136,7 @@ export default function App() {
     albumRef.current = result.album;
     setAlbum(result.album);
     setAlbumNews({ firstTime: result.firstTime, unlocked: result.unlocked });
+    if (result.unlocked.length) sfx.unlock();
     setScreen('gameover');
   }, []);
 
@@ -1136,8 +1156,10 @@ export default function App() {
       const beforeTime = g.elapsed;
       g.elapsed += dt / 60;
       const directorStep = updateDirector(g.director, g.elapsed);
+      if (directorStep === 'warning') sfx.eventWarn();
       if (directorStep === 'start') {
         const type = g.director.active.type;
+        sfx.eventStart(EVENTS[type].kind);
         showPopup(EVENTS[type].hint, '#ffffff');
         if (type === 'mascotte') g.course.forceItems = true;
         if (type === 'sciame') g.nextShowerAt = g.elapsed;
@@ -1185,8 +1207,8 @@ export default function App() {
         }
         if (g.platforms[i].x + g.platforms[i].w < playerX) {
           const result = passCombo(g.combo, g.platforms[i]);
-          if (result === 'broken') showPopup('Combo persa', '#ff9a9a');
-          if (result === 'forgiven') showPopup('Perdonato!', '#ffc2d6');
+          if (result === 'broken') { showPopup('Combo persa', '#ff9a9a'); sfx.comboLost(); }
+          if (result === 'forgiven') { showPopup('Perdonato!', '#ffc2d6'); sfx.forgiven(); }
         }
         if (g.platforms[i].x + g.platforms[i].w < -20) {
           g.platforms.splice(i, 1);
@@ -1244,6 +1266,7 @@ export default function App() {
           if (pRight > cx - reach && pLeft < cx + COLLECTIBLE_SIZE + reach && pBottom > cy - reach && pTop < cy + COLLECTIBLE_SIZE + reach) {
             plat.collected = true;
             g.score += g.traits.itemPoints * g.combo.multiplier;
+            sfx.collect();
             g.collected.push(plat.collectibleMascot);
             setScore(g.score);
             setCollected([...g.collected]);
@@ -1253,12 +1276,18 @@ export default function App() {
       }
 
       if (landed) {
+        const isNew = !landed.touched;
+        if (landed.type === 'boost') sfx.boost();
+        else if (landed.type === 'crumble') sfx.crumble();
+        else if (landed.type === 'soft') { if (isNew || g.velY !== 0) sfx.soft(); }
+        else if (!isNew) sfx.bounce();
         const center = playerX + PLAYER_SIZE / 2;
         const tolerance = g.traits.edge;
         const result = landCombo(g.combo, landed, center >= landed.x - tolerance && center <= landed.x + landed.w + tolerance);
-        if (result === 'up') showPopup(`x${g.combo.multiplier}!`, w.accentEmphasis);
-        else if (result === 'edge') showPopup('Sul bordo!', '#ff9a9a');
-        else if (result === 'forgiven') showPopup('Perdonato!', '#ffc2d6');
+        if (isNew && landed.type !== 'boost' && landed.type !== 'crumble' && landed.type !== 'soft') sfx.land(g.combo.count);
+        if (result === 'up') { showPopup(`x${g.combo.multiplier}!`, w.accentEmphasis); sfx.multiplier(g.combo.multiplier); }
+        else if (result === 'edge') { showPopup('Sul bordo!', '#ff9a9a'); sfx.comboLost(); }
+        else if (result === 'forgiven') { showPopup('Perdonato!', '#ffc2d6'); sfx.forgiven(); }
       }
 
       // La sfida si chiude quando la piattaforma di recupero successiva supera il giocatore.
@@ -1269,8 +1298,10 @@ export default function App() {
           g.score += bonus;
           setScore(g.score);
           showPopup(`Sfida superata! +${bonus}`, '#ffd76a');
+          sfx.challengeWin();
         } else {
           showPopup('Sfida fallita', '#ff9a9a');
+          sfx.challengeFail();
         }
         g.challenge = null;
         endEvent(g.director, g.elapsed);
@@ -1291,10 +1322,12 @@ export default function App() {
         if (w.id === 'buconero' && g.elapsed >= g.nextMeteorAt) {
           g.meteors.push(createMeteor(++g.meteorId, g.elapsed, SCREEN_W, SCREEN_H, g.playerY + PLAYER_SIZE / 2));
           g.nextMeteorAt = g.elapsed + Math.max(3.5, 6 - g.elapsed / 60) + Math.random();
+          sfx.meteorWarn();
         }
         if (event?.type === 'sciame' && g.elapsed >= g.nextShowerAt) {
           g.meteors.push(createMeteor(++g.meteorId, g.elapsed, SCREEN_W, SCREEN_H, g.playerY + PLAYER_SIZE / 2));
           g.nextShowerAt = g.elapsed + 1.1 + Math.random() * .5;
+          sfx.meteorWarn();
         }
         const hits = g.meteors.filter(m => meteorHitsPlayer(m, beforeTime, g.elapsed, playerX, previousY, g.playerY, PLAYER_SIZE));
         if (hits.length && g.shield > 0) {
@@ -1302,6 +1335,7 @@ export default function App() {
           g.meteors = g.meteors.filter(m => !hits.includes(m));
           setBursts(prev => [...prev, { x: playerX + PLAYER_SIZE / 2 - 20, y: g.playerY + PLAYER_SIZE / 2 - 20, id: Math.random() }]);
           showPopup('Scudo!', '#9fe3ff');
+          sfx.shield();
         } else if (hits.length) {
           gameOver();
           return;
@@ -1314,6 +1348,7 @@ export default function App() {
             g.score += bonus;
             setScore(g.score);
             showPopup(`Di un soffio! +${bonus}`, '#ffd76a');
+            sfx.nearMiss();
           }
         }
         g.meteors = g.meteors.filter(m => meteorPosition(m, g.elapsed).x > -160);
@@ -1364,6 +1399,8 @@ export default function App() {
           selectedMascot={selectedMascot}
           worldScores={worldScores}
           unlockedWorlds={unlockedWorlds}
+          soundOn={soundOn}
+          onToggleSound={() => { unlockAudio(); setSoundOn(on => !on); }}
           locked={locked}
           onStart={startGame}
           onPrevWorld={() => setSelectedWorld(i => Math.max(0, i - 1))}
@@ -1514,6 +1551,13 @@ export default function App() {
 // ── Menu styles ──
 
 const ms = StyleSheet.create({
+  soundButton: {
+    position: 'absolute', top: Platform.OS === 'ios' ? 56 : 34, right: 20, zIndex: 6,
+    width: 40, height: 40, borderRadius: 20, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  soundGlyph: { fontSize: 20, fontWeight: '700', marginTop: -2 },
+  soundSlash: { position: 'absolute', width: 26, height: 2, borderRadius: 1, transform: [{ rotate: '-45deg' }] },
   profileButtonWrapper: {
     position: 'absolute', top: Platform.OS === 'ios' ? 54 : 32,
     left: 0, right: 0, alignItems: 'center', zIndex: 5,
