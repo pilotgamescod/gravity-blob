@@ -15,6 +15,16 @@ Meccaniche per mondo (tra parentesi il livello da cui compaiono):
 - Buco nero: gravità pulsante e meteore letali (dopo 6 secondi, con 1,25 secondi di avviso, traiettoria fissa, solo il nucleo uccide). Piattaforme mobili (1) e molle (3).
 - Supernova: piattaforme ⋯ che spariscono subito dopo il primo rimbalzo, da entrambi i lati. Piattaforme mobili (2) e molle (3).
 
+## Punti e combo
+
+- Si guadagnano punti col tempo (circa 6 al secondo) e raccogliendo mascotte (10 punti).
+- **Combo**: ogni atterraggio pulito su una piattaforma nuova lo fa salire. Si azzera se si salta una piattaforma o si atterra sul bordo, cioè con il centro del blob fuori dalla piattaforma (messaggi "Combo persa" e "Sul bordo!"). Una molla perdona una piattaforma saltata subito dopo.
+- **Moltiplicatore**: x2 a 4 atterraggi di fila, x3 a 10, x4 a 18, x5 a 30 (`COMBO_STEPS` in `src/combo.js`). Vale per tutti i punti.
+- **Di un soffio**: in Buco nero, una meteora che passa vicina senza colpire vale 5 punti per il moltiplicatore.
+- Il combo migliore compare a fine partita e nel profilo, ed è salvato con gli altri progressi.
+
+Taratura fatta con un simulatore della fisica: un giocatore che pensa solo a sopravvivere salta circa una piattaforma su tre e atterra sul bordo nel 35% dei casi (combo medio intorno a 1); uno preciso può tenere il combo per tutta la partita in ogni mondo.
+
 L'indicatore dei settori misura la distanza percorsa (2.400 unità per settore).
 
 ## Estendere il gioco
@@ -27,7 +37,7 @@ Il parametro seed di `createCourse` permette di riprodurre un percorso per debug
 
 ## Verifiche
 
-- `npm test`: riproducibilità, varietà, limiti geometrici su quattro dimensioni, validità dei blocchi, livelli, meccaniche per mondo e gravità.
+- `npm test`: riproducibilità, varietà, limiti geometrici su quattro dimensioni, validità dei blocchi, livelli, meccaniche per mondo, combo, passaggi ravvicinati e gravità.
 - `npx expo export --platform web --output-dir /tmp/gravity-blob-preview`
 - `npm run test:browser`: richiede Chrome installato e l'export precedente; verifica menu, avvio, morte, riprova e ritorno al menu. Screenshot in `/tmp/gravity-menu.png` e `/tmp/gravity-playing.png`.
 - `npx expo export --platform ios`: verifica il bundle nativo; non sostituisce una prova su iPhone.

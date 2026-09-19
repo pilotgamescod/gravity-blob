@@ -21,3 +21,11 @@ export function meteorHitsPlayer(meteor, before, now, playerX, previousY, player
   const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy || 1)));
   return Math.hypot(ax + t * dx, ay + t * dy) < meteor.radius + size * .28;
 }
+// Passaggio ravvicinato: meteora attiva vicina al giocatore ma fuori dalla zona letale.
+export const NEAR_MISS_MARGIN = 36;
+export function meteorNearMiss(meteor, elapsed, playerX, playerY, size) {
+  const pos = meteorPosition(meteor, elapsed);
+  if (!pos.active) return false;
+  const d = Math.hypot(pos.x - playerX - size / 2, pos.y - playerY - size / 2);
+  return d < meteor.radius + size * .28 + NEAR_MISS_MARGIN;
+}

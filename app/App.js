@@ -17,7 +17,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { RULES, createCourse, nextPlatform, platformY, gravityFactor, bounceVelocity, sweepPlatform } from './src/course';
 import { WorldScene, WORLD_ART } from './src/WorldScene';
 import { DeepSpace, MeteorField } from './src/DeepSpace';
-import { createMeteor, meteorPosition, meteorHitsPlayer } from './src/meteors';
+import { createMeteor, meteorPosition, meteorHitsPlayer, meteorNearMiss } from './src/meteors';
+import { createCombo, landCombo, passCombo, comboProgress, COMBO_STEPS } from './src/combo';
 import { loadProgress, saveProgress, requestPersistentStorage } from './src/storage';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -339,6 +340,48 @@ function ScorePop({ value }) {
   return <Animated.Text style={[gs.scoreValue, { transform: [{ scale }] }]}>{value}</Animated.Text>;
 }
 
+// ── Combo ──
+
+function FloatText({ text, color, onDone }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(anim, { toValue: 1, duration: 900, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(onDone);
+  }, []);
+  return (
+    <Animated.Text pointerEvents="none" style={[gs.floatText, { color,
+      opacity: anim.interpolate({ inputRange: [0, .15, .7, 1], outputRange: [0, 1, 1, 0] }),
+      transform: [
+        { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [10, -26] }) },
+        { scale: anim.interpolate({ inputRange: [0, .15, 1], outputRange: [.7, 1.1, 1] }) },
+      ],
+    }]}>{text}</Animated.Text>
+  );
+}
+
+function ComboPill({ count, multiplier, accent }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (multiplier < 2) return;
+    scale.setValue(1.35);
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 4 }).start();
+  }, [multiplier]);
+  if (count === 0) return null;
+  const maxed = multiplier >= COMBO_STEPS.length;
+  return (
+    <View style={gs.comboPill}>
+      <Animated.Text style={[gs.comboMultiplier, { color: multiplier > 1 ? '#fff' : 'rgba(255,255,255,0.6)', transform: [{ scale }] }]}>
+        x{multiplier}
+      </Animated.Text>
+      <View>
+        <Text style={gs.comboCount}>{count} DI FILA</Text>
+        <View style={gs.comboTrack}>
+          <View style={[gs.comboFill, { width: `${comboProgress(count) * 100}%`, backgroundColor: maxed ? '#ffd76a' : accent }]} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ── Collectible blob ──
 
 function CollectibleBlob({ source, left, top }) {
@@ -652,7 +695,7 @@ function CharacterSelectScreen({ selectedMascot, onSelect, onConfirm, onBack, wo
 
 // ── Profile screen ──
 
-function ProfileScreen({ selectedMascot, worldScores, onBack, onCharacters, world }) {
+function ProfileScreen({ selectedMascot, worldScores, bestCombo, onBack, onCharacters, world }) {
   const totalScore = getTotalScore(worldScores);
   const bestScore = getBestScore(worldScores);
   const completed = getWorldsCompleted(worldScores);
@@ -693,6 +736,10 @@ function ProfileScreen({ selectedMascot, worldScores, onBack, onCharacters, worl
             <Text style={[ps.statValue, { color: world.accent }]}>{completed}</Text>
             <Text style={[ps.statLabel, { color: world.eyebrowColor }]}>Mondi completati</Text>
           </View>
+          <View style={[ps.statCard, { borderColor: world.cardBorder, backgroundColor: world.cardBg }]}>
+            <Text style={[ps.statValue, { color: world.accent }]}>{bestCombo}</Text>
+            <Text style={[ps.statLabel, { color: world.eyebrowColor }]}>Combo record</Text>
+          </View>
         </View>
 
         {/* Per-world scores */}
@@ -731,7 +778,7 @@ function ProfileScreen({ selectedMascot, worldScores, onBack, onCharacters, worl
 
 // ── Game over screen ──
 
-function GameOverScreen({ score, worldHighScore, collected, world, selectedMascot, onRestart, onMenu }) {
+function GameOverScreen({ score, worldHighScore, collected, bestCombo, world, selectedMascot, onRestart, onMenu }) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 5, tension: 60 }).start();
@@ -755,6 +802,12 @@ function GameOverScreen({ score, worldHighScore, collected, world, selectedMasco
             <View style={[go.recordBadge, { backgroundColor: world.accent + '18', borderColor: world.accent + '40' }]}>
               <Text style={[go.recordText, { color: world.accent }]}>Nuovo Record!</Text>
             </View>
+          )}
+
+          {bestCombo > 0 && (
+            <Text style={[go.comboLine, { color: world.secondaryText }]}>
+              Combo migliore: <Text style={{ color: world.accent, fontWeight: '800' }}>{bestCombo} di fila</Text>
+            </Text>
           )}
 
           {collected.length > 0 && (
@@ -802,11 +855,12 @@ export default function App() {
   const [worldScores, setWorldScores] = useState(() =>
     Object.fromEntries(WORLDS.map(w => [w.id, Number(saved.worldScores?.[w.id]) || 0]))
   );
+  const [bestCombo, setBestCombo] = useState(Number(saved.bestCombo) || 0);
 
   useEffect(() => { requestPersistentStorage(); }, []);
   useEffect(() => {
-    saveProgress({ worldScores, selectedWorld, selectedMascot });
-  }, [worldScores, selectedWorld, selectedMascot]);
+    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo });
+  }, [worldScores, selectedWorld, selectedMascot, bestCombo]);
 
   const [score, setScore] = useState(0);
   const [playerY, setPlayerY] = useState(SCREEN_H * 0.5);
@@ -819,6 +873,8 @@ export default function App() {
   const [trail, setTrail] = useState([]);
   const [scrollOffset, setScrollOffset] = useState(0);
   const [meteors, setMeteors] = useState([]);
+  const [combo, setCombo] = useState({ count: 0, multiplier: 1, best: 0 });
+  const [popups, setPopups] = useState([]);
 
   const gameRef = useRef({
     playerY: SCREEN_H * 0.5, velY: 0, gravityDown: true,
@@ -835,6 +891,10 @@ export default function App() {
   const doSquash = useCallback(() => {
     squashAnim.setValue(0.65);
     Animated.spring(squashAnim, { toValue: 1, friction: 3, tension: 180, useNativeDriver: true }).start();
+  }, []);
+
+  const showPopup = useCallback((text, color = '#fff') => {
+    setPopups(prev => [...prev.slice(-2), { id: Math.random(), text, color }]);
   }, []);
 
   const initGame = useCallback(() => {
@@ -855,6 +915,7 @@ export default function App() {
     g.scoreClock = 0;
     g.course = createCourse(w, SCREEN_H);
     g.collected = [];
+    g.combo = createCombo();
     g.onPlatform = false;
     g.trail = [];
     g.totalScroll = 0;
@@ -875,6 +936,8 @@ export default function App() {
     setPlatforms([...plats]);
     setPlayerY(g.playerY);
     setCollected([]);
+    setCombo({ count: 0, multiplier: 1, best: 0 });
+    setPopups([]);
     setBursts([]);
     setFlipCount(0);
     setTrail([]);
@@ -916,6 +979,7 @@ export default function App() {
       ...prev,
       [wId]: Math.max(prev[wId], finalScore),
     }));
+    setBestCombo(prev => Math.max(prev, gameRef.current.combo.best));
     setScreen('gameover');
   }, []);
 
@@ -952,6 +1016,9 @@ export default function App() {
         g.platforms[i].previousY = g.platforms[i].y;
         g.platforms[i].y = platformY(g.platforms[i], g.elapsed);
         g.platforms[i].x -= scrollAmt;
+        if (g.platforms[i].x + g.platforms[i].w < playerX && passCombo(g.combo, g.platforms[i])) {
+          showPopup('Combo persa', '#ff9a9a');
+        }
         if (g.platforms[i].x + g.platforms[i].w < -20) {
           g.platforms.splice(i, 1);
         }
@@ -976,6 +1043,7 @@ export default function App() {
       const pTop = g.playerY;
       const pBottom = g.playerY + PLAYER_SIZE;
 
+      let landed = null;
       for (const plat of g.platforms) {
         const overlapX = pRight > plat.x + 5 && pLeft < plat.x + plat.w - 5;
         if (!overlapX) continue;
@@ -985,6 +1053,7 @@ export default function App() {
             g.playerY = plat.y - PLAYER_SIZE;
             g.velY = bounceVelocity(w.bounceVel, plat.type, true);
             g.onPlatform = true;
+            landed = plat;
             if (plat.type === 'crumble' && plat.hitAt == null) plat.hitAt = g.elapsed;
             doSquash();
           }
@@ -993,6 +1062,7 @@ export default function App() {
             g.playerY = plat.y + PLATFORM_H;
             g.velY = bounceVelocity(w.bounceVel, plat.type, false);
             g.onPlatform = true;
+            landed = plat;
             if (plat.type === 'crumble' && plat.hitAt == null) plat.hitAt = g.elapsed;
             doSquash();
           }
@@ -1003,7 +1073,7 @@ export default function App() {
           const cy = plat.y - COLLECTIBLE_SIZE - 10;
           if (pRight > cx && pLeft < cx + COLLECTIBLE_SIZE && pBottom > cy && pTop < cy + COLLECTIBLE_SIZE) {
             plat.collected = true;
-            g.score += 10;
+            g.score += 10 * g.combo.multiplier;
             g.collected.push(plat.collectibleMascot);
             setScore(g.score);
             setCollected([...g.collected]);
@@ -1012,13 +1082,20 @@ export default function App() {
         }
       }
 
+      if (landed) {
+        const center = playerX + PLAYER_SIZE / 2;
+        const result = landCombo(g.combo, landed, center >= landed.x && center <= landed.x + landed.w);
+        if (result === 'up') showPopup(`x${g.combo.multiplier}!`, w.accentEmphasis);
+        else if (result === 'edge') showPopup('Sul bordo!', '#ff9a9a');
+      }
+
       // Keep the first bounce, then remove touched fragile platforms before rendering.
       // This applies to both upper and lower contact, with no second landing window.
       g.platforms = g.platforms.filter(plat => plat.hitAt == null);
 
       g.scoreClock += dt;
       if (g.scoreClock >= 10) {
-        g.score += Math.floor(g.scoreClock / 10);
+        g.score += Math.floor(g.scoreClock / 10) * g.combo.multiplier;
         g.scoreClock %= 10;
         setScore(g.score);
       }
@@ -1032,6 +1109,16 @@ export default function App() {
           gameOver();
           return;
         }
+        for (const m of g.meteors) {
+          if (!m.close && meteorNearMiss(m, g.elapsed, playerX, g.playerY, PLAYER_SIZE)) m.close = true;
+          if (m.close && !m.rewarded && meteorPosition(m, g.elapsed).x + m.radius < playerX) {
+            m.rewarded = true;
+            const bonus = 5 * g.combo.multiplier;
+            g.score += bonus;
+            setScore(g.score);
+            showPopup(`Di un soffio! +${bonus}`, '#ffd76a');
+          }
+        }
         g.meteors = g.meteors.filter(m => meteorPosition(m, g.elapsed).x > -160);
         setMeteors([...g.meteors]);
       }
@@ -1041,6 +1128,8 @@ export default function App() {
         return;
       }
 
+      const c = g.combo;
+      setCombo(prev => prev.count === c.count && prev.multiplier === c.multiplier ? prev : { count: c.count, multiplier: c.multiplier, best: c.best });
       setPlayerY(g.playerY);
       setPlatforms([...g.platforms]);
       setTrail([...g.trail]);
@@ -1050,7 +1139,7 @@ export default function App() {
 
     rafRef.current = requestAnimationFrame(loop);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [screen, doSquash, gameOver, playerX]);
+  }, [screen, doSquash, gameOver, playerX, showPopup]);
 
   const removeBurst = useCallback((id) => {
     setBursts(prev => prev.filter(b => b.id !== id));
@@ -1101,6 +1190,7 @@ export default function App() {
         <ProfileScreen
           selectedMascot={selectedMascot}
           worldScores={worldScores}
+          bestCombo={bestCombo}
           onBack={() => setScreen('menu')}
           onCharacters={() => setScreen('characters')}
           world={world}
@@ -1117,6 +1207,7 @@ export default function App() {
           score={score}
           worldHighScore={worldScores[world.id] || 0}
           collected={collected}
+          bestCombo={gameRef.current.combo?.best || 0}
           world={world}
           selectedMascot={selectedMascot}
           onRestart={startGame}
@@ -1175,6 +1266,12 @@ export default function App() {
               <ScorePop value={score} />
             </View>
             <GravityIndicator down={gravityDown} />
+          </View>
+          <View pointerEvents="none" style={gs.comboArea}>
+            <ComboPill count={combo.count} multiplier={combo.multiplier} accent={world.accentEmphasis} />
+            {popups.map(p => (
+              <FloatText key={p.id} text={p.text} color={p.color} onDone={() => setPopups(prev => prev.filter(x => x.id !== p.id))} />
+            ))}
           </View>
 
           <View pointerEvents="none" style={{ position: 'absolute', bottom: 38, left: 24, right: 24, alignItems: 'center' }}>
@@ -1363,6 +1460,7 @@ const go = StyleSheet.create({
     paddingHorizontal: 20, paddingVertical: 6, marginBottom: 4,
   },
   recordText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
+  comboLine: { fontSize: 13, marginTop: 12 },
   collectedArea: { alignItems: 'center', marginTop: 16 },
   collectedLabel: { fontSize: 12, letterSpacing: 1, marginBottom: 8 },
   collectedRow: { flexDirection: 'row', gap: 6 },
@@ -1416,4 +1514,22 @@ const gs = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
   },
   collectedIcon: { width: 30, height: 30, resizeMode: 'contain' },
+  comboArea: {
+    position: 'absolute', top: (Platform.OS === 'ios' ? 54 : 32) + 50,
+    left: 16, alignItems: 'flex-start',
+  },
+  comboPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(16,10,28,0.45)',
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+  },
+  comboMultiplier: { fontSize: 18, fontWeight: '900' },
+  comboCount: { fontSize: 8, fontWeight: '800', letterSpacing: 1.2, color: 'rgba(255,255,255,0.8)' },
+  comboTrack: { height: 3, width: 56, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', marginTop: 4, overflow: 'hidden' },
+  comboFill: { height: 3, borderRadius: 2 },
+  floatText: {
+    marginTop: 8, fontSize: 15, fontWeight: '900', letterSpacing: .5,
+    textShadowColor: 'rgba(0,0,0,0.45)', textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 },
+  },
 });
