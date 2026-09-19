@@ -28,10 +28,10 @@ test('skipping a platform breaks the combo, touched or already passed ones do no
   const c = createCombo();
   const plats = Array.from({ length: 6 }, (_, id) => ({ id, type: 'normal' }));
   plats.slice(0, 5).forEach(p => landCombo(c, p));
-  plats.slice(0, 5).forEach(p => assert.equal(passCombo(c, p), false));
+  plats.slice(0, 5).forEach(p => assert.equal(passCombo(c, p), null));
   assert.equal(c.multiplier, 2);
-  assert.equal(passCombo(c, plats[5]), true);
-  assert.equal(passCombo(c, plats[5]), false);
+  assert.equal(passCombo(c, plats[5]), 'broken');
+  assert.equal(passCombo(c, plats[5]), null);
   assert.deepEqual([c.count, c.multiplier, c.best], [0, 1, 5]);
 });
 
@@ -43,10 +43,19 @@ test('landing on the edge resets the combo', () => {
   assert.equal(landCombo(c, { id: 10 }, false), null);
 });
 
+test('mascot abilities: starting combo and one forgiven break', () => {
+  const c = createCombo(4, 1);
+  assert.deepEqual([c.count, c.multiplier], [4, 2]);
+  assert.equal(passCombo(c, { id: 1 }), 'forgiven');
+  assert.equal(c.count, 4);
+  assert.equal(landCombo(c, { id: 2 }, false), 'edge');
+  assert.deepEqual([c.count, c.multiplier, c.resets], [0, 1, 1]);
+});
+
 test('a spring forgives exactly one skipped platform', () => {
   const c = createCombo();
   landCombo(c, { id: 1, type: 'boost' });
-  assert.equal(passCombo(c, { id: 2 }), false);
+  assert.equal(passCombo(c, { id: 2 }), null);
   assert.equal(c.count, 1);
   passCombo(c, { id: 3 });
   assert.equal(c.count, 0);

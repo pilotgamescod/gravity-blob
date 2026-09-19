@@ -1,5 +1,6 @@
 // Pure, seeded course generation: add chunks in chunks.js or world rules here without touching rendering.
 import { CHUNKS } from './chunks.js';
+import { pickMascot } from './mascots.js';
 
 // mechanics: meccanica → livello da cui il mondo la usa. 'x' nei blocchi pesca fra queste.
 // intro/tierSeconds: secondi prima del livello 1 e durata di ogni livello successivo.
@@ -108,7 +109,7 @@ export function nextPlatform(course, previous) {
     y: baseY, baseY, w, type, amplitude: type === 'moving' ? 18 + difficulty * 12 : 0,
     phase: random() * Math.PI * 2, sector, stage: tier, chunk: course.chunk, recovery, collected: false,
     challenge: course.challengeChunk && !recovery,
-    hasCollectible: opts.includes('item') || (!!course.forceItems && index > 3), collectibleMascot: Math.floor(random() * 14),
+    hasCollectible: opts.includes('item') || (!!course.forceItems && index > 3), collectibleMascot: pickMascot(world.id, random),
     colorIdx: ['nebulosa','asteroidi','buconero','supernova'].indexOf(world.id),
   };
 }

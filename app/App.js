@@ -19,6 +19,7 @@ import { WorldScene, WORLD_ART } from './src/WorldScene';
 import { DeepSpace, MeteorField } from './src/DeepSpace';
 import { createMeteor, meteorPosition, meteorHitsPlayer, meteorNearMiss } from './src/meteors';
 import { createCombo, landCombo, passCombo, comboProgress, COMBO_STEPS } from './src/combo';
+import { MASCOT_INFO, RARITY, mascotTraits, mascotNeed, isMascotUnlocked, mascotWorlds, addToAlbum } from './src/mascots';
 import { EVENTS, createDirector, updateDirector, endEvent, eventProgress, LOW_GRAVITY, LOW_GRAVITY_BOUNCE, RUSH_SPEED } from './src/events';
 import { loadProgress, saveProgress, requestPersistentStorage } from './src/storage';
 
@@ -651,7 +652,7 @@ function StartScreen({
           {/* Character link */}
           <TouchableOpacity onPress={onCharacters} activeOpacity={0.6}>
             <Text style={[ms.characterLink, { color: world.accent }]}>
-              Scegli la tua mascotte  {'↗'}
+              Album e mascotte  {'↗'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -665,8 +666,24 @@ function StartScreen({
 const CARD_GAP = 12;
 const CARD_WIDTH = (SCREEN_W - 48 - CARD_GAP * 2) / 3;
 
-function CharacterSelectScreen({ selectedMascot, onSelect, onConfirm, onBack, world }) {
+const WORLD_TITLES = { nebulosa: 'Nebulosa', asteroidi: 'Asteroidi', buconero: 'Buco nero', supernova: 'Supernova' };
+
+function joinWorlds(ids) {
+  if (ids.length === Object.keys(WORLD_TITLES).length) return 'tutti i mondi';
+  const names = ids.map(id => WORLD_TITLES[id]);
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} e ${names.at(-1)}` : names[0];
+}
+
+function CharacterSelectScreen({ selectedMascot, album, onSelect, onConfirm, onBack, world }) {
   const [tempSelection, setTempSelection] = useState(selectedMascot);
+  const found = MASCOT_INFO.filter((_, i) => album[i] > 0).length;
+  const playable = MASCOT_INFO.filter((_, i) => isMascotUnlocked(i, album)).length;
+  const info = MASCOT_INFO[tempSelection];
+  const seen = album[tempSelection] > 0 || info.starter;
+  const unlocked = isMascotUnlocked(tempSelection, album);
+  const need = mascotNeed(tempSelection);
+  const have = album[tempSelection] || 0;
+  const rarity = RARITY[info.rarity];
 
   return (
     <View style={{ flex: 1 }}>
@@ -678,52 +695,81 @@ function CharacterSelectScreen({ selectedMascot, onSelect, onConfirm, onBack, wo
           <TouchableOpacity onPress={onBack} style={[cs.backButton, { borderColor: world.cardBorder, backgroundColor: world.cardBg }]} activeOpacity={0.6}>
             <Text style={[cs.backArrow, { color: world.accent }]}>{'‹'}</Text>
           </TouchableOpacity>
-          <Text style={[cs.pageHeaderLabel, { color: world.eyebrowColor }]}>IL TUO COMPAGNO DI VIAGGIO</Text>
+          <Text style={[cs.pageHeaderLabel, { color: world.eyebrowColor }]}>ALBUM DELLE MASCOTTE</Text>
         </View>
 
         <Text style={[cs.pageTitle, { color: world.textColor }]}>Chi gioca con te?</Text>
-        <Text style={[cs.pageSubtitle, { color: world.secondaryText }]}>Una piccola personalita per ogni avventura.</Text>
+        <Text style={[cs.pageSubtitle, { color: world.secondaryText }]}>
+          {found} di {MASCOT_INFO.length} trovate · {playable} giocabili
+        </Text>
+
+        {/* Detail */}
+        <View style={[cs.detailCard, { backgroundColor: world.cardBg, borderColor: world.cardBorder }]}>
+          <Image source={MASCOTS[tempSelection]} style={[cs.detailImage, !seen && cs.silhouette]} />
+          <View style={{ flex: 1 }}>
+            <Text style={[cs.detailRarity, { color: rarity.color }]}>{rarity.label.toUpperCase()}</Text>
+            <Text style={[cs.detailName, { color: world.textColor }]}>{seen ? info.name : '???'}</Text>
+            <Text style={[cs.detailAbility, { color: world.accentDark }]}>{info.ability}</Text>
+            <Text style={[cs.detailText, { color: world.secondaryText }]}>{info.description}</Text>
+            {!unlocked && (
+              <Text style={[cs.detailText, { color: world.eyebrowColor, marginTop: 6 }]}>
+                Raccoglila {need - have === 1 ? 'ancora 1 volta' : `ancora ${need - have} volte`} ({have}/{need}) · si trova in {joinWorlds(mascotWorlds(tempSelection))}
+              </Text>
+            )}
+          </View>
+        </View>
 
         {/* Grid */}
         <View style={cs.grid}>
-          {MASCOTS.map((src, i) => (
-            <TouchableOpacity
-              key={i}
-              onPress={() => setTempSelection(i)}
-              activeOpacity={0.7}
-              style={[
-                cs.card,
-                {
-                  borderColor: i === tempSelection ? world.accent : '#fff',
-                  backgroundColor: i === tempSelection ? (world.accent + '18') : 'rgba(255,255,255,0.5)',
-                  borderWidth: i === tempSelection ? 2 : 1,
-                  marginLeft: i % 3 > 0 ? CARD_GAP : 0,
-                },
-              ]}
-            >
-              {i === tempSelection && (
-                <Text style={[cs.checkmark, { color: world.accentDark }]}>{'✓'}</Text>
-              )}
-              <Image source={src} style={cs.cardImage} />
-              <Text style={[cs.cardName, { color: world.secondaryText }]}>{MASCOT_NAMES[i]}</Text>
-            </TouchableOpacity>
-          ))}
+          {MASCOTS.map((src, i) => {
+            const m = MASCOT_INFO[i];
+            const isSeen = album[i] > 0 || m.starter;
+            const isUnlocked = isMascotUnlocked(i, album);
+            const selected = i === tempSelection;
+            return (
+              <TouchableOpacity
+                key={i}
+                onPress={() => setTempSelection(i)}
+                activeOpacity={0.7}
+                style={[
+                  cs.card,
+                  {
+                    borderColor: selected ? world.accent : '#fff',
+                    backgroundColor: selected ? (world.accent + '18') : 'rgba(255,255,255,0.5)',
+                    borderWidth: selected ? 2 : 1,
+                    marginLeft: i % 3 > 0 ? CARD_GAP : 0,
+                  },
+                ]}
+              >
+                {i === selectedMascot && (
+                  <Text style={[cs.checkmark, { color: world.accentDark }]}>{'✓'}</Text>
+                )}
+                <View style={[cs.rarityDot, { backgroundColor: RARITY[m.rarity].color }]} />
+                <Image source={src} style={[cs.cardImage, !isSeen && cs.silhouette, isSeen && !isUnlocked && { opacity: .45 }]} />
+                <Text style={[cs.cardName, { color: world.secondaryText }]} numberOfLines={1}>{isSeen ? m.name : '???'}</Text>
+                <Text style={[cs.cardCount, { color: isUnlocked ? world.accent : world.eyebrowColor }]}>
+                  {isUnlocked ? m.ability : `${album[i] || 0}/${mascotNeed(i)}`}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
 
       {/* Sticky confirm button */}
       <View style={cs.confirmArea}>
         <TouchableOpacity
+          disabled={!unlocked}
           onPress={() => { onSelect(tempSelection); onConfirm(); }}
           activeOpacity={0.85}
-          style={[ms.playButtonOuter, { backgroundColor: world.buttonShadow }]}
+          style={[ms.playButtonOuter, { backgroundColor: unlocked ? world.buttonShadow : '#7f7894' }]}
         >
           <LinearGradient
-            colors={world.accentGradient}
+            colors={unlocked ? world.accentGradient : ['#aaa3bd', '#948ca9']}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
             style={ms.playButtonInner}
           >
-            <Text style={ms.playButtonText}>Andiamo a giocare  {'↗'}</Text>
+            <Text style={ms.playButtonText}>{unlocked ? `Gioca con ${info.name}  ↗` : 'Ancora da sbloccare'}</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -733,7 +779,7 @@ function CharacterSelectScreen({ selectedMascot, onSelect, onConfirm, onBack, wo
 
 // ── Profile screen ──
 
-function ProfileScreen({ selectedMascot, worldScores, unlockedWorlds, bestCombo, onBack, onCharacters, world }) {
+function ProfileScreen({ selectedMascot, worldScores, unlockedWorlds, bestCombo, album, onBack, onCharacters, world }) {
   const totalScore = getTotalScore(worldScores);
   const bestScore = getBestScore(worldScores);
   const completed = getWorldsCompleted(worldScores, unlockedWorlds);
@@ -780,6 +826,14 @@ function ProfileScreen({ selectedMascot, worldScores, unlockedWorlds, bestCombo,
           </View>
         </View>
 
+        <TouchableOpacity onPress={onCharacters} activeOpacity={0.7}
+          style={[ps.albumRow, { backgroundColor: world.cardBg, borderColor: world.cardBorder }]}>
+          <Text style={[ps.worldRowTitle, { color: world.textColor }]}>Album</Text>
+          <Text style={[ps.worldRowSub, { color: world.secondaryText }]}>
+            {MASCOT_INFO.filter((_, i) => album[i] > 0).length}/{MASCOT_INFO.length} trovate · {MASCOT_INFO.filter((_, i) => isMascotUnlocked(i, album)).length} giocabili
+          </Text>
+        </TouchableOpacity>
+
         {/* Per-world scores */}
         <Text style={[ps.sectionTitle, { color: world.textColor }]}>Record per mondo</Text>
         {WORLDS.map((w, i) => {
@@ -816,7 +870,7 @@ function ProfileScreen({ selectedMascot, worldScores, unlockedWorlds, bestCombo,
 
 // ── Game over screen ──
 
-function GameOverScreen({ score, worldHighScore, collected, bestCombo, world, selectedMascot, onRestart, onMenu }) {
+function GameOverScreen({ score, worldHighScore, collected, bestCombo, albumNews, world, selectedMascot, onRestart, onMenu }) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 5, tension: 60 }).start();
@@ -859,6 +913,27 @@ function GameOverScreen({ score, worldHighScore, collected, bestCombo, world, se
             </View>
           )}
 
+          {albumNews.unlocked.length > 0 && (
+            <View style={[go.newsBox, { borderColor: world.accent + '50', backgroundColor: world.accent + '14' }]}>
+              <Text style={[go.newsTitle, { color: world.accentDark }]}>ORA GIOCABILE</Text>
+              {albumNews.unlocked.map(i => (
+                <View key={i} style={go.newsRow}>
+                  <Image source={MASCOTS[i]} style={go.newsIcon} />
+                  <Text style={[go.newsText, { color: world.textColor }]}>
+                    {MASCOT_INFO[i].name} · <Text style={{ fontWeight: '700' }}>{MASCOT_INFO[i].ability}</Text>
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {albumNews.firstTime.filter(i => !albumNews.unlocked.includes(i)).length > 0 && (
+            <Text style={[go.comboLine, { color: world.secondaryText }]}>
+              Nuove nell'album: <Text style={{ color: world.accent, fontWeight: '800' }}>
+                {albumNews.firstTime.filter(i => !albumNews.unlocked.includes(i)).map(i => MASCOT_INFO[i].name).join(', ')}
+              </Text>
+            </Text>
+          )}
+
           {/* Restart */}
           <TouchableOpacity onPress={onRestart} activeOpacity={0.85}
             style={[ms.playButtonOuter, { backgroundColor: world.buttonShadow, marginTop: 24, width: '100%' }]}>
@@ -887,8 +962,14 @@ export default function App() {
   const [selectedWorld, setSelectedWorld] = useState(
     Number.isInteger(saved.selectedWorld) && saved.selectedWorld >= 0 && saved.selectedWorld < WORLDS.length ? saved.selectedWorld : 0
   );
+  const [album, setAlbum] = useState(() => Object.fromEntries(
+    Object.entries(saved.album || {}).filter(([i, n]) => MASCOT_INFO[i] && Number(n) > 0).map(([i, n]) => [i, Number(n)])
+  ));
+  const [albumNews, setAlbumNews] = useState({ firstTime: [], unlocked: [] });
+  const albumRef = useRef(album);
+  albumRef.current = album;
   const [selectedMascot, setSelectedMascot] = useState(
-    Number.isInteger(saved.selectedMascot) && saved.selectedMascot >= 0 && saved.selectedMascot < MASCOTS.length ? saved.selectedMascot : 0
+    Number.isInteger(saved.selectedMascot) && isMascotUnlocked(saved.selectedMascot, saved.album || {}) ? saved.selectedMascot : 0
   );
   const [worldScores, setWorldScores] = useState(() =>
     Object.fromEntries(WORLDS.map(w => [w.id, Number(saved.worldScores?.[w.id]) || 0]))
@@ -903,8 +984,8 @@ export default function App() {
 
   useEffect(() => { requestPersistentStorage(); }, []);
   useEffect(() => {
-    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo, unlocked: unlockedWorlds });
-  }, [worldScores, selectedWorld, selectedMascot, bestCombo, unlockedWorlds]);
+    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo, unlocked: unlockedWorlds, album });
+  }, [worldScores, selectedWorld, selectedMascot, bestCombo, unlockedWorlds, album]);
 
   const [score, setScore] = useState(0);
   const [playerY, setPlayerY] = useState(SCREEN_H * 0.5);
@@ -960,7 +1041,9 @@ export default function App() {
     g.scoreClock = 0;
     g.course = createCourse(w, SCREEN_H);
     g.collected = [];
-    g.combo = createCombo();
+    g.traits = mascotTraits(selectedMascot);
+    g.combo = createCombo(g.traits.startCombo, g.traits.forgive);
+    g.shield = g.traits.shield;
     g.director = createDirector(w.id);
     g.challenge = null;
     g.nextShowerAt = Infinity;
@@ -984,14 +1067,14 @@ export default function App() {
     setPlatforms([...plats]);
     setPlayerY(g.playerY);
     setCollected([]);
-    setCombo({ count: 0, multiplier: 1, best: 0 });
+    setCombo({ count: g.combo.count, multiplier: g.combo.multiplier, best: g.combo.best });
     setPopups([]);
     setEventView(null);
     setBursts([]);
     setFlipCount(0);
     setTrail([]);
     setScrollOffset(0);
-  }, [playerX, selectedWorld]);
+  }, [playerX, selectedWorld, selectedMascot]);
 
   const startGame = useCallback(() => {
     initGame();
@@ -1029,6 +1112,11 @@ export default function App() {
       [wId]: Math.max(prev[wId], finalScore),
     }));
     setBestCombo(prev => Math.max(prev, gameRef.current.combo.best));
+    const found = gameRef.current.collected;
+    const result = addToAlbum(albumRef.current, found);
+    albumRef.current = result.album;
+    setAlbum(result.album);
+    setAlbumNews({ firstTime: result.firstTime, unlocked: result.unlocked });
     setScreen('gameover');
   }, []);
 
@@ -1067,12 +1155,16 @@ export default function App() {
       g.scrollSpeed = (w.id === 'nebulosa'
         ? w.scrollSpeed + Math.min(1.5, Math.max(0, g.elapsed - 10) * .055)
         : Math.min(w.scrollSpeed * 1.5, w.scrollSpeed + g.elapsed * 60 * w.scrollIncrement))
-        * (event?.type === 'corsa' ? RUSH_SPEED : 1);
+        * (event?.type === 'corsa' ? 1 + (RUSH_SPEED - 1) * g.traits.rush : 1);
       const lowGravity = event?.type === 'leggera';
-      const bounceBase = w.bounceVel * (lowGravity ? LOW_GRAVITY_BOUNCE : 1);
+      const bounceBase = w.bounceVel * (lowGravity ? LOW_GRAVITY_BOUNCE : 1) * g.traits.bounce;
+      const bounceFor = (type, down) => {
+        if (type === 'soft' && g.traits.softBounce) return bounceVelocity(bounceBase, 'normal', down) * g.traits.softBounce;
+        return bounceVelocity(bounceBase, type, down) * (type === 'boost' ? g.traits.boost : 1);
+      };
       const previousY = g.playerY;
 
-      const grav = (g.gravityDown ? w.gravity : -w.gravity) * gravityFactor(w.id, g.elapsed) * (lowGravity ? LOW_GRAVITY : 1);
+      const grav = (g.gravityDown ? w.gravity : -w.gravity) * gravityFactor(w.id, g.elapsed) * (lowGravity ? LOW_GRAVITY : 1) * g.traits.gravity;
       if (!g.onPlatform) g.velY += grav * dt;
       const maxVelocity = w.id === 'asteroidi' ? 18 : 14;
       g.velY = Math.max(-maxVelocity, Math.min(maxVelocity, g.velY));
@@ -1091,8 +1183,10 @@ export default function App() {
           ch.firstId = g.platforms[i].id;
           ch.resetsAt = g.combo.resets;
         }
-        if (g.platforms[i].x + g.platforms[i].w < playerX && passCombo(g.combo, g.platforms[i])) {
-          showPopup('Combo persa', '#ff9a9a');
+        if (g.platforms[i].x + g.platforms[i].w < playerX) {
+          const result = passCombo(g.combo, g.platforms[i]);
+          if (result === 'broken') showPopup('Combo persa', '#ff9a9a');
+          if (result === 'forgiven') showPopup('Perdonato!', '#ffc2d6');
         }
         if (g.platforms[i].x + g.platforms[i].w < -20) {
           g.platforms.splice(i, 1);
@@ -1126,7 +1220,7 @@ export default function App() {
         if (g.gravityDown) {
           if (g.velY >= 0 && pBottom >= plat.y && previousY + PLAYER_SIZE <= (plat.previousY ?? plat.y) + 4) {
             g.playerY = plat.y - PLAYER_SIZE;
-            g.velY = bounceVelocity(bounceBase, plat.type, true);
+            g.velY = bounceFor(plat.type, true);
             g.onPlatform = true;
             landed = plat;
             if (plat.type === 'crumble' && plat.hitAt == null) plat.hitAt = g.elapsed;
@@ -1135,7 +1229,7 @@ export default function App() {
         } else {
           if (g.velY <= 0 && pTop <= plat.y + PLATFORM_H && previousY >= (plat.previousY ?? plat.y) + PLATFORM_H - 4) {
             g.playerY = plat.y + PLATFORM_H;
-            g.velY = bounceVelocity(bounceBase, plat.type, false);
+            g.velY = bounceFor(plat.type, false);
             g.onPlatform = true;
             landed = plat;
             if (plat.type === 'crumble' && plat.hitAt == null) plat.hitAt = g.elapsed;
@@ -1146,9 +1240,10 @@ export default function App() {
         if (!plat.collected && plat.hasCollectible) {
           const cx = plat.x + plat.w / 2 - COLLECTIBLE_SIZE / 2;
           const cy = plat.y - COLLECTIBLE_SIZE - 10;
-          if (pRight > cx && pLeft < cx + COLLECTIBLE_SIZE && pBottom > cy && pTop < cy + COLLECTIBLE_SIZE) {
+          const reach = g.traits.magnet;
+          if (pRight > cx - reach && pLeft < cx + COLLECTIBLE_SIZE + reach && pBottom > cy - reach && pTop < cy + COLLECTIBLE_SIZE + reach) {
             plat.collected = true;
-            g.score += 10 * g.combo.multiplier;
+            g.score += g.traits.itemPoints * g.combo.multiplier;
             g.collected.push(plat.collectibleMascot);
             setScore(g.score);
             setCollected([...g.collected]);
@@ -1159,16 +1254,18 @@ export default function App() {
 
       if (landed) {
         const center = playerX + PLAYER_SIZE / 2;
-        const result = landCombo(g.combo, landed, center >= landed.x && center <= landed.x + landed.w);
+        const tolerance = g.traits.edge;
+        const result = landCombo(g.combo, landed, center >= landed.x - tolerance && center <= landed.x + landed.w + tolerance);
         if (result === 'up') showPopup(`x${g.combo.multiplier}!`, w.accentEmphasis);
         else if (result === 'edge') showPopup('Sul bordo!', '#ff9a9a');
+        else if (result === 'forgiven') showPopup('Perdonato!', '#ffc2d6');
       }
 
       // La sfida si chiude quando la piattaforma di recupero successiva supera il giocatore.
       const ch = g.challenge;
       if (ch?.started && g.platforms.some(p => p.recovery && p.id > ch.firstId && p.x < playerX)) {
         if (g.combo.resets === ch.resetsAt) {
-          const bonus = 50 * g.combo.multiplier;
+          const bonus = 50 * g.combo.multiplier * g.traits.challengeBonus;
           g.score += bonus;
           setScore(g.score);
           showPopup(`Sfida superata! +${bonus}`, '#ffd76a');
@@ -1199,7 +1296,13 @@ export default function App() {
           g.meteors.push(createMeteor(++g.meteorId, g.elapsed, SCREEN_W, SCREEN_H, g.playerY + PLAYER_SIZE / 2));
           g.nextShowerAt = g.elapsed + 1.1 + Math.random() * .5;
         }
-        if (g.meteors.some(m => meteorHitsPlayer(m, beforeTime, g.elapsed, playerX, previousY, g.playerY, PLAYER_SIZE))) {
+        const hits = g.meteors.filter(m => meteorHitsPlayer(m, beforeTime, g.elapsed, playerX, previousY, g.playerY, PLAYER_SIZE));
+        if (hits.length && g.shield > 0) {
+          g.shield--;
+          g.meteors = g.meteors.filter(m => !hits.includes(m));
+          setBursts(prev => [...prev, { x: playerX + PLAYER_SIZE / 2 - 20, y: g.playerY + PLAYER_SIZE / 2 - 20, id: Math.random() }]);
+          showPopup('Scudo!', '#9fe3ff');
+        } else if (hits.length) {
           gameOver();
           return;
         }
@@ -1279,6 +1382,7 @@ export default function App() {
         <StatusBar barStyle="dark-content" />
         <CharacterSelectScreen
           selectedMascot={selectedMascot}
+          album={album}
           onSelect={setSelectedMascot}
           onConfirm={() => setScreen('menu')}
           onBack={() => setScreen('menu')}
@@ -1297,6 +1401,7 @@ export default function App() {
           worldScores={worldScores}
           unlockedWorlds={unlockedWorlds}
           bestCombo={bestCombo}
+          album={album}
           onBack={() => setScreen('menu')}
           onCharacters={() => setScreen('characters')}
           world={world}
@@ -1314,6 +1419,7 @@ export default function App() {
           worldHighScore={worldScores[world.id] || 0}
           collected={collected}
           bestCombo={gameRef.current.combo?.best || 0}
+          albumNews={albumNews}
           world={world}
           selectedMascot={selectedMascot}
           onRestart={startGame}
@@ -1503,6 +1609,18 @@ const cs = StyleSheet.create({
   checkmark: { position: 'absolute', right: 7, top: 5, fontSize: 14, fontWeight: '700' },
   cardImage: { width: 56, height: 56, resizeMode: 'contain' },
   cardName: { fontSize: 10, marginTop: 10, textAlign: 'center' },
+  cardCount: { fontSize: 9, fontWeight: '700', marginTop: 3, textAlign: 'center' },
+  rarityDot: { position: 'absolute', left: 9, top: 9, width: 7, height: 7, borderRadius: 4 },
+  silhouette: { tintColor: '#3a3450', opacity: .35 },
+  detailCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    borderWidth: 1, borderRadius: 22, padding: 16, marginTop: 22,
+  },
+  detailImage: { width: 72, height: 72, resizeMode: 'contain' },
+  detailRarity: { fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
+  detailName: { fontSize: 18, fontWeight: '800', marginTop: 2 },
+  detailAbility: { fontSize: 13, fontWeight: '700', marginTop: 4 },
+  detailText: { fontSize: 12, lineHeight: 17, marginTop: 2 },
   confirmArea: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     paddingHorizontal: 24, paddingBottom: Platform.OS === 'ios' ? 34 : 20, paddingTop: 12,
@@ -1533,6 +1651,10 @@ const ps = StyleSheet.create({
   },
   statValue: { fontSize: 25, fontWeight: '800' },
   statLabel: { fontSize: 10, marginTop: 8, textAlign: 'center' },
+  albumRow: {
+    width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    borderWidth: 1, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16, marginTop: 12,
+  },
   sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5, marginTop: 28, marginBottom: 12, alignSelf: 'flex-start' },
   worldRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -1569,7 +1691,12 @@ const go = StyleSheet.create({
     paddingHorizontal: 20, paddingVertical: 6, marginBottom: 4,
   },
   recordText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
-  comboLine: { fontSize: 13, marginTop: 12 },
+  comboLine: { fontSize: 13, marginTop: 12, textAlign: 'center' },
+  newsBox: { marginTop: 14, borderWidth: 1, borderRadius: 16, padding: 12, alignSelf: 'stretch' },
+  newsTitle: { fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6, textAlign: 'center' },
+  newsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  newsIcon: { width: 28, height: 28, resizeMode: 'contain' },
+  newsText: { fontSize: 13, flexShrink: 1 },
   collectedArea: { alignItems: 'center', marginTop: 16 },
   collectedLabel: { fontSize: 12, letterSpacing: 1, marginBottom: 8 },
   collectedRow: { flexDirection: 'row', gap: 6 },

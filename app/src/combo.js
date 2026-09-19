@@ -19,24 +19,34 @@ export function comboProgress(count) {
   return (count - from) / (to - from);
 }
 
-export function createCombo() {
-  return { count: 0, best: 0, multiplier: 1, boostGrace: false, resets: 0 };
+// start: combo iniziale; forgive: combo persi che vengono perdonati (abilità delle mascotte).
+export function createCombo(start = 0, forgive = 0) {
+  return { count: start, best: start, multiplier: comboMultiplier(start), boostGrace: false, resets: 0, forgive };
+}
+
+// Azzera il combo, a meno che non resti un perdono. Restituisce 'forgiven' o 'broken'.
+function breakCombo(combo) {
+  if (combo.forgive > 0 && combo.count > 0) {
+    combo.forgive--;
+    return 'forgiven';
+  }
+  combo.resets++;
+  combo.count = 0;
+  combo.multiplier = 1;
+  return 'broken';
 }
 
 // Primo contatto con una piattaforma. centered: il centro del blob è sopra la piattaforma.
 // Restituisce 'up' se il moltiplicatore è salito, 'edge' se un atterraggio sul bordo
-// ha rotto un combo in corso, altrimenti null.
+// ha rotto un combo in corso, 'forgiven' se è stato perdonato, altrimenti null.
 export function landCombo(combo, platform, centered = true) {
   if (platform.touched) return null;
   platform.touched = true;
   // Una molla può lanciare oltre la piattaforma successiva: quella non rompe il combo.
   combo.boostGrace = platform.type === 'boost';
   if (!centered) {
-    const broke = combo.count > 0;
-    combo.resets++;
-    combo.count = 0;
-    combo.multiplier = 1;
-    return broke ? 'edge' : null;
+    if (combo.count === 0) return null;
+    return breakCombo(combo) === 'forgiven' ? 'forgiven' : 'edge';
   }
   const before = combo.multiplier;
   combo.count++;
@@ -45,19 +55,18 @@ export function landCombo(combo, platform, centered = true) {
   return combo.multiplier > before ? 'up' : null;
 }
 
-// Una piattaforma è uscita alle spalle del giocatore. Restituisce true se il combo si è rotto
-// con un moltiplicatore attivo (per mostrarlo a schermo).
+// Una piattaforma è uscita alle spalle del giocatore. Restituisce 'broken' se il combo si è
+// rotto con un moltiplicatore attivo, 'forgiven' se è stato perdonato, altrimenti null.
 export function passCombo(combo, platform) {
-  if (platform.passed) return false;
+  if (platform.passed) return null;
   platform.passed = true;
-  if (platform.touched) return false;
+  if (platform.touched) return null;
   if (combo.boostGrace) {
     combo.boostGrace = false;
-    return false;
+    return null;
   }
   const hadMultiplier = combo.multiplier > 1;
-  combo.resets++;
-  combo.count = 0;
-  combo.multiplier = 1;
-  return hadMultiplier;
+  const result = breakCombo(combo);
+  if (result === 'forgiven') return result;
+  return hadMultiplier ? 'broken' : null;
 }

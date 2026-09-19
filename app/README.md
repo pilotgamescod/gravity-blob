@@ -27,6 +27,18 @@ Dal diciottesimo secondo arriva un evento ogni 16–24 secondi, annunciato 2 sec
 
 Nebulosa non ha lo sciame, Buco nero non ha la gravità leggera (ha già la sua gravità pulsante). Con il simulatore della fisica, corsa e gravità leggera restano superabili senza perdere il combo anche se durano tutta la partita.
 
+## Album e mascotte
+
+Ogni mascotte raccolta entra nell'album (salvato sul dispositivo). Le mascotte hanno tre rarità e si trovano in mondi diversi; per giocarci bisogna raccoglierle abbastanza volte (`src/mascots.js`):
+
+- **Comuni** (5 raccolte): Triangolo rosa, Uovo arancione, Cubo blu, Blob giallo, Uovo verde. Blob viola è giocabile da subito.
+- **Rare** (3 raccolte, rare in Nebulosa, frequenti da Asteroidi): Goccia menta, Nuvola lilla, Pentagono ciano, Goccia lime.
+- **Leggendarie** (1 raccolta, solo in Buco nero e Supernova): Diamante celeste, Stella rossa, Cuore pesca, Esagono pesca.
+
+Ognuna ha una piccola abilità: rimbalzi più alti o più bassi, gravità diversa, calamita per le mascotte, tolleranza sul bordo, scudo contro una meteora, mascotte da 15 punti, partenza a x2, un combo perso perdonato, rimbalzo sulle nuvole, molle più forti, bonus sfida doppio, meno accelerazione nella corsa. Le abilità sono valori in `MASCOT_INFO[i].traits`, letti dal ciclo di gioco.
+
+Nell'album le mascotte mai trovate sono sagome; la scheda in alto mostra abilità, raccolte mancanti e mondi in cui cercarle. A fine partita compaiono le nuove trovate e quelle appena diventate giocabili. Una mascotte scelta prima di questa versione che non risulta ancora sbloccata torna a Blob viola.
+
 ## Sblocco dei mondi
 
 Asteroidi si sblocca con 300 punti in Nebulosa, Buco nero con 450 in Asteroidi, Supernova con 600 in Buco nero: con un gioco medio servono circa 30–60 secondi nel mondo precedente, con combo alti meno. Un mondo sbloccato resta sbloccato; i salvataggi precedenti mantengono i mondi aperti con le vecchie soglie (40/60/80).
@@ -53,7 +65,7 @@ Il parametro seed di `createCourse` permette di riprodurre un percorso per debug
 
 ## Verifiche
 
-- `npm test`: riproducibilità, varietà, limiti geometrici su quattro dimensioni, validità dei blocchi, livelli, meccaniche per mondo, combo, passaggi ravvicinati, eventi, tratti sfida e gravità.
+- `npm test`: riproducibilità, varietà, limiti geometrici su quattro dimensioni, validità dei blocchi, livelli, meccaniche per mondo, combo, passaggi ravvicinati, eventi, tratti sfida, album e rarità delle mascotte e gravità.
 - `npx expo export --platform web --output-dir /tmp/gravity-blob-preview`
 - `npm run test:browser`: richiede Chrome installato e l'export precedente; verifica menu, avvio, morte, riprova e ritorno al menu. Screenshot in `/tmp/gravity-menu.png` e `/tmp/gravity-playing.png`.
 - `npx expo export --platform ios`: verifica il bundle nativo; non sostituisce una prova su iPhone.
