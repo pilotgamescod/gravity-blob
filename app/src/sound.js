@@ -5,8 +5,10 @@
 // Come ogni suono di pagina web, su iPhone rispetta l'interruttore silenzioso.
 
 let ctx = null;
-let master = null;
+let master = null;      // canale degli effetti
+let musicBus = null;    // canale della musica (usato da music.js)
 let enabled = true;
+const unlockListeners = [];
 let world = 'nebulosa';
 const lastPlayed = {};
 
@@ -37,6 +39,9 @@ export function unlockAudio() {
       master = ctx.createGain();
       master.gain.value = enabled ? .55 : 0;
       master.connect(comp);
+      musicBus = ctx.createGain();
+      musicBus.gain.value = 1;
+      musicBus.connect(comp);
       comp.connect(ctx.destination);
       // Buffer muto: su iOS completa lo sblocco dentro il gesto.
       const buffer = ctx.createBuffer(1, 1, 22050);
@@ -45,10 +50,27 @@ export function unlockAudio() {
       src.connect(ctx.destination);
       src.start(0);
     }
-    if (ctx.state === 'suspended') ctx.resume();
+    if (ctx.state === 'suspended') ctx.resume().then(notifyUnlocked).catch(() => {});
+    else notifyUnlocked();
   } catch {
     ctx = null;
   }
+}
+
+function notifyUnlocked() {
+  if (!ctx || ctx.state !== 'running') return;
+  for (const fn of unlockListeners.splice(0)) fn();
+}
+
+// Per music.js: contesto e canale della musica, oppure null se l'audio non è ancora attivo.
+export function getMusicOutput() {
+  return ctx && ctx.state === 'running' ? { ctx, bus: musicBus } : null;
+}
+
+// Esegue fn appena l'audio è sbloccato (subito, se lo è già).
+export function whenAudioReady(fn) {
+  if (ctx && ctx.state === 'running') fn();
+  else unlockListeners.push(fn);
 }
 
 if (typeof document !== 'undefined') {
@@ -59,9 +81,11 @@ if (typeof document !== 'undefined') {
     }
   };
   for (const e of ['touchend', 'pointerup', 'click', 'keydown']) document.addEventListener(e, unlock, true);
-  // Tornando nell'app dopo averla messa in background, iOS sospende l'audio.
+  // In background l'audio si ferma; tornando nell'app riprende.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+    if (!ctx) return;
+    if (document.visibilityState === 'hidden') ctx.suspend().catch(() => {});
+    else ctx.resume().catch(() => {});
   });
 }
 

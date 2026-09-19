@@ -14,12 +14,13 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { RULES, createCourse, nextPlatform, platformY, gravityFactor, bounceVelocity, sweepPlatform } from './src/course';
+import { RULES, courseTier, createCourse, nextPlatform, platformY, gravityFactor, bounceVelocity, sweepPlatform } from './src/course';
 import { WorldScene, WORLD_ART } from './src/WorldScene';
 import { DeepSpace, MeteorField } from './src/DeepSpace';
 import { createMeteor, meteorPosition, meteorHitsPlayer, meteorNearMiss } from './src/meteors';
 import { createCombo, landCombo, passCombo, comboProgress, COMBO_STEPS } from './src/combo';
 import { sfx, unlockAudio, setSoundEnabled, setSoundWorld } from './src/sound';
+import { playMusic, stopMusic, setMusicEnabled, setMusicIntensity, setMusicMood } from './src/music';
 import { MASCOT_INFO, RARITY, mascotTraits, mascotNeed, isMascotUnlocked, mascotWorlds, addToAlbum } from './src/mascots';
 import { EVENTS, createDirector, updateDirector, endEvent, eventProgress, LOW_GRAVITY, LOW_GRAVITY_BOUNCE, RUSH_SPEED } from './src/events';
 import { loadProgress, saveProgress, requestPersistentStorage } from './src/storage';
@@ -511,7 +512,7 @@ function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld,
 // ── Start screen (Ride the Wave style) ──
 
 function StartScreen({
-  world, selectedWorldIdx, selectedMascot, worldScores, unlockedWorlds, soundOn, onToggleSound,
+  world, selectedWorldIdx, selectedMascot, worldScores, unlockedWorlds, soundOn, onToggleSound, musicOn, onToggleMusic,
   onStart, onPrevWorld, onNextWorld, onDotPress,
   onCharacters, onProfile, locked,
 }) {
@@ -537,13 +538,21 @@ function StartScreen({
       <LinearGradient colors={world.menuBg} style={StyleSheet.absoluteFill} />
       <MenuDecorations accent={world.accent} world={world} prominent />
 
-      {/* Sound toggle */}
-      <TouchableOpacity onPress={onToggleSound} activeOpacity={0.7}
-        accessibilityRole="button" accessibilityLabel={soundOn ? 'Disattiva i suoni' : 'Attiva i suoni'}
-        style={[ms.soundButton, { borderColor: world.cardBorder, backgroundColor: world.cardBg }]}>
-        <Text style={[ms.soundGlyph, { color: soundOn ? world.accent : world.eyebrowColor }]}>♪</Text>
-        {!soundOn && <View style={[ms.soundSlash, { backgroundColor: world.eyebrowColor }]} />}
-      </TouchableOpacity>
+      {/* Music and sound toggles */}
+      <View style={ms.soundColumn}>
+        <TouchableOpacity onPress={onToggleMusic} activeOpacity={0.7}
+          accessibilityRole="button" accessibilityLabel={musicOn ? 'Disattiva la musica' : 'Attiva la musica'}
+          style={[ms.soundButton, { borderColor: world.cardBorder, backgroundColor: world.cardBg }]}>
+          <Text style={[ms.soundGlyph, { color: musicOn ? world.accent : world.eyebrowColor }]}>♪</Text>
+          {!musicOn && <View style={[ms.soundSlash, { backgroundColor: world.eyebrowColor }]} />}
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onToggleSound} activeOpacity={0.7}
+          accessibilityRole="button" accessibilityLabel={soundOn ? 'Disattiva gli effetti sonori' : 'Attiva gli effetti sonori'}
+          style={[ms.soundButton, { borderColor: world.cardBorder, backgroundColor: world.cardBg }]}>
+          <Text style={[ms.soundLabel, { color: soundOn ? world.accent : world.eyebrowColor }]}>FX</Text>
+          {!soundOn && <View style={[ms.soundSlash, { backgroundColor: world.eyebrowColor }]} />}
+        </TouchableOpacity>
+      </View>
 
       {/* Profile button */}
       <View style={ms.profileButtonWrapper}>
@@ -986,6 +995,8 @@ export default function App() {
   const [bestCombo, setBestCombo] = useState(Number(saved.bestCombo) || 0);
   const [soundOn, setSoundOn] = useState(saved.sound !== false);
   useEffect(() => { setSoundEnabled(soundOn); }, [soundOn]);
+  const [musicOn, setMusicOn] = useState(saved.music !== false);
+  useEffect(() => { setMusicEnabled(musicOn); }, [musicOn]);
   const worldScoresRef = useRef(null);
   const [unlockedWorlds, setUnlockedWorlds] = useState(() => initialUnlocked(saved));
   // Un mondo sbloccato resta sbloccato.
@@ -995,10 +1006,16 @@ export default function App() {
   }, [worldScores, unlockedWorlds]);
 
   useEffect(() => { requestPersistentStorage(); }, []);
+  // Brano del mondo: versione completa in partita, tranquilla nei menu, silenzio a fine partita.
+  useEffect(() => {
+    if (screen === 'playing') playMusic(WORLDS[selectedWorld].id, 'game');
+    else if (screen === 'gameover') stopMusic(.6);
+    else playMusic(WORLDS[selectedWorld].id, 'menu');
+  }, [screen, selectedWorld]);
   worldScoresRef.current = worldScores;
   useEffect(() => {
-    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo, unlocked: unlockedWorlds, album, sound: soundOn });
-  }, [worldScores, selectedWorld, selectedMascot, bestCombo, unlockedWorlds, album, soundOn]);
+    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo, unlocked: unlockedWorlds, album, sound: soundOn, music: musicOn });
+  }, [worldScores, selectedWorld, selectedMascot, bestCombo, unlockedWorlds, album, soundOn, musicOn]);
 
   const [score, setScore] = useState(0);
   const [playerY, setPlayerY] = useState(SCREEN_H * 0.5);
@@ -1056,6 +1073,7 @@ export default function App() {
     g.collected = [];
     unlockAudio();
     setSoundWorld(w.id);
+    g.musicTier = -1;
     g.traits = mascotTraits(selectedMascot);
     g.combo = createCombo(g.traits.startCombo, g.traits.forgive);
     g.shield = g.traits.shield;
@@ -1174,6 +1192,9 @@ export default function App() {
         g.challenge = null;
       }
       const event = g.director.active;
+      const tier = courseTier(RULES[w.id], g.elapsed);
+      if (tier !== g.musicTier) { g.musicTier = tier; setMusicIntensity(tier); }
+      setMusicMood(event ? EVENTS[event.type].kind : null);
       g.scrollSpeed = (w.id === 'nebulosa'
         ? w.scrollSpeed + Math.min(1.5, Math.max(0, g.elapsed - 10) * .055)
         : Math.min(w.scrollSpeed * 1.5, w.scrollSpeed + g.elapsed * 60 * w.scrollIncrement))
@@ -1401,6 +1422,8 @@ export default function App() {
           unlockedWorlds={unlockedWorlds}
           soundOn={soundOn}
           onToggleSound={() => { unlockAudio(); setSoundOn(on => !on); }}
+          musicOn={musicOn}
+          onToggleMusic={() => { unlockAudio(); setMusicOn(on => !on); }}
           locked={locked}
           onStart={startGame}
           onPrevWorld={() => setSelectedWorld(i => Math.max(0, i - 1))}
@@ -1551,11 +1574,12 @@ export default function App() {
 // ── Menu styles ──
 
 const ms = StyleSheet.create({
+  soundColumn: { position: 'absolute', top: Platform.OS === 'ios' ? 56 : 34, right: 20, zIndex: 6, gap: 8 },
   soundButton: {
-    position: 'absolute', top: Platform.OS === 'ios' ? 56 : 34, right: 20, zIndex: 6,
     width: 40, height: 40, borderRadius: 20, borderWidth: 1,
     alignItems: 'center', justifyContent: 'center',
   },
+  soundLabel: { fontSize: 12, fontWeight: '900', letterSpacing: .5 },
   soundGlyph: { fontSize: 20, fontWeight: '700', marginTop: -2 },
   soundSlash: { position: 'absolute', width: 26, height: 2, borderRadius: 1, transform: [{ rotate: '-45deg' }] },
   profileButtonWrapper: {
