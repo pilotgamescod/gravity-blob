@@ -19,6 +19,7 @@ import { WorldScene, WORLD_ART } from './src/WorldScene';
 import { DeepSpace, MeteorField } from './src/DeepSpace';
 import { createMeteor, meteorPosition, meteorHitsPlayer, meteorNearMiss } from './src/meteors';
 import { createCombo, landCombo, passCombo, comboProgress, COMBO_STEPS } from './src/combo';
+import { EVENTS, createDirector, updateDirector, endEvent, eventProgress, LOW_GRAVITY, LOW_GRAVITY_BOUNCE, RUSH_SPEED } from './src/events';
 import { loadProgress, saveProgress, requestPersistentStorage } from './src/storage';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -73,7 +74,7 @@ const WORLDS = [
     status: 'Le piattaforme si restringono.',
     challenge: 'Riflessi pronti, salti precisi.',
     detail: 'Piattaforme strette, velocita crescente.',
-    unlockScore: 40,
+    unlockScore: 300,
     scrollSpeed: 3.0, scrollIncrement: 0.0003,
     gapMin: 115, gapMax: 195, platMinW: 75, platMaxW: 140,
     gravity: 0.55, bounceVel: -9.5, collectChance: 0.3,
@@ -92,7 +93,7 @@ const WORLDS = [
     status: 'La gravita e piu forte qui dentro.',
     challenge: 'Ogni rimbalzo conta. Non cadere nel vuoto.',
     detail: 'Gravita intensa, spazi ridotti.',
-    unlockScore: 60,
+    unlockScore: 450,
     scrollSpeed: 3.3, scrollIncrement: 0.0004,
     gapMin: 125, gapMax: 210, platMinW: 65, platMaxW: 125,
     gravity: 0.65, bounceVel: -10, collectChance: 0.25,
@@ -111,7 +112,7 @@ const WORLDS = [
     status: 'Tutto brucia. Tutto accelera.',
     challenge: 'Velocita massima. Solo i migliori sopravvivono.',
     detail: 'Velocita folle, piattaforme minuscole.',
-    unlockScore: 80,
+    unlockScore: 600,
     scrollSpeed: 3.8, scrollIncrement: 0.0005,
     gapMin: 135, gapMax: 220, platMinW: 55, platMaxW: 110,
     gravity: 0.7, bounceVel: -10.5, collectChance: 0.2,
@@ -144,10 +145,19 @@ const PLATFORM_COLORS = [
 
 function randomBetween(a, b) { return a + Math.random() * (b - a); }
 
-function isWorldUnlocked(idx, scores) {
-  if (idx === 0) return true;
+// unlocked: mondi già sbloccati in passato, che restano aperti anche se le soglie cambiano.
+function isWorldUnlocked(idx, scores, unlocked = []) {
+  if (idx === 0 || unlocked.includes(WORLDS[idx].id)) return true;
   const prev = WORLDS[idx - 1];
   return (scores[prev.id] || 0) >= WORLDS[idx].unlockScore;
+}
+
+// Soglie in vigore prima del combo: servono solo per convertire i vecchi salvataggi.
+const LEGACY_UNLOCK_SCORES = [0, 40, 60, 80];
+function initialUnlocked(saved) {
+  if (Array.isArray(saved.unlocked)) return saved.unlocked.filter(id => WORLDS.some(w => w.id === id));
+  const scores = saved.worldScores || {};
+  return WORLDS.filter((w, i) => i === 0 || (Number(scores[WORLDS[i - 1].id]) || 0) >= LEGACY_UNLOCK_SCORES[i]).map(w => w.id);
 }
 
 function getTotalScore(scores) {
@@ -158,9 +168,9 @@ function getBestScore(scores) {
   return Math.max(0, ...Object.values(scores));
 }
 
-function getWorldsCompleted(scores) {
+function getWorldsCompleted(scores, unlocked) {
   return WORLDS.filter((w, i) => {
-    if (i < WORLDS.length - 1) return (scores[w.id] || 0) >= WORLDS[i + 1].unlockScore;
+    if (i < WORLDS.length - 1) return isWorldUnlocked(i + 1, scores, unlocked);
     return (scores[w.id] || 0) > 0;
   }).length;
 }
@@ -382,6 +392,34 @@ function ComboPill({ count, multiplier, accent }) {
   );
 }
 
+function EventBanner({ view, accent }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (view?.phase !== 'warning') { pulse.setValue(1); return; }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: .35, duration: 280, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1, duration: 280, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [view?.phase, view?.type]);
+  if (!view) return <View style={{ flex: 1 }} />;
+  const event = EVENTS[view.type];
+  return (
+    <View style={gs.eventArea}>
+      <Animated.View style={[gs.eventPill, { opacity: pulse, borderColor: view.phase === 'active' ? accent : 'rgba(255,255,255,0.18)' }]}>
+        <Text style={gs.eventEyebrow}>{view.phase === 'warning' ? 'IN ARRIVO' : 'EVENTO'}</Text>
+        <Text style={gs.eventTitle} numberOfLines={1}>{event.title.toUpperCase()}</Text>
+        {view.phase === 'active' && view.progress != null && (
+          <View style={gs.eventTrack}>
+            <View style={[gs.eventFill, { width: `${(1 - view.progress) * 100}%`, backgroundColor: accent }]} />
+          </View>
+        )}
+      </Animated.View>
+    </View>
+  );
+}
+
 // ── Collectible blob ──
 
 function CollectibleBlob({ source, left, top }) {
@@ -411,7 +449,7 @@ function CollectibleBlob({ source, left, top }) {
 
 // ── Platform ──
 
-function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld }) {
+function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld, challenge }) {
   const special = {
     moving: { bg: '#a47a39', border: '#f7d79d', glow: '#b8893c40' },
     sweep: { bg: '#bc526c', border: '#ffb7ce', glow: '#bc526c40' },
@@ -428,7 +466,7 @@ function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld 
       <View style={{
         position: 'absolute', left: x, top: y, width: w, height: PLATFORM_H,
         borderRadius: type === 'crumble' ? 4 : PLATFORM_H / 2, backgroundColor: hitAt != null ? '#ff926a' : c.bg,
-        borderWidth: 1, borderColor: c.border, overflow: 'hidden',
+        borderWidth: challenge ? 2 : 1, borderColor: challenge ? '#ffd76a' : c.border, overflow: 'hidden',
       }}>
         <View style={{
           position: 'absolute', top: 0, left: 8, right: 8,
@@ -471,7 +509,7 @@ function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld 
 // ── Start screen (Ride the Wave style) ──
 
 function StartScreen({
-  world, selectedWorldIdx, selectedMascot, worldScores,
+  world, selectedWorldIdx, selectedMascot, worldScores, unlockedWorlds,
   onStart, onPrevWorld, onNextWorld, onDotPress,
   onCharacters, onProfile, locked,
 }) {
@@ -540,7 +578,7 @@ function StartScreen({
             <View style={{ alignItems: 'center' }}>
               <View style={ms.worldDots}>
                 {WORLDS.map((_, i) => {
-                  const unlocked = isWorldUnlocked(i, worldScores);
+                  const unlocked = isWorldUnlocked(i, worldScores, unlockedWorlds);
                   return (
                     <TouchableOpacity key={i} onPress={() => onDotPress(i)} style={{ padding: 8 }}>
                       <View style={[
@@ -695,10 +733,10 @@ function CharacterSelectScreen({ selectedMascot, onSelect, onConfirm, onBack, wo
 
 // ── Profile screen ──
 
-function ProfileScreen({ selectedMascot, worldScores, bestCombo, onBack, onCharacters, world }) {
+function ProfileScreen({ selectedMascot, worldScores, unlockedWorlds, bestCombo, onBack, onCharacters, world }) {
   const totalScore = getTotalScore(worldScores);
   const bestScore = getBestScore(worldScores);
-  const completed = getWorldsCompleted(worldScores);
+  const completed = getWorldsCompleted(worldScores, unlockedWorlds);
 
   return (
     <View style={{ flex: 1 }}>
@@ -745,7 +783,7 @@ function ProfileScreen({ selectedMascot, worldScores, bestCombo, onBack, onChara
         {/* Per-world scores */}
         <Text style={[ps.sectionTitle, { color: world.textColor }]}>Record per mondo</Text>
         {WORLDS.map((w, i) => {
-          const unlocked = isWorldUnlocked(i, worldScores);
+          const unlocked = isWorldUnlocked(i, worldScores, unlockedWorlds);
           const score = worldScores[w.id] || 0;
           return (
             <View key={w.id} style={[ps.worldRow, { backgroundColor: world.cardBg, borderColor: world.cardBorder }]}>
@@ -856,11 +894,17 @@ export default function App() {
     Object.fromEntries(WORLDS.map(w => [w.id, Number(saved.worldScores?.[w.id]) || 0]))
   );
   const [bestCombo, setBestCombo] = useState(Number(saved.bestCombo) || 0);
+  const [unlockedWorlds, setUnlockedWorlds] = useState(() => initialUnlocked(saved));
+  // Un mondo sbloccato resta sbloccato.
+  useEffect(() => {
+    const now = WORLDS.filter((w, i) => isWorldUnlocked(i, worldScores, unlockedWorlds)).map(w => w.id);
+    if (now.length !== unlockedWorlds.length) setUnlockedWorlds(now);
+  }, [worldScores, unlockedWorlds]);
 
   useEffect(() => { requestPersistentStorage(); }, []);
   useEffect(() => {
-    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo });
-  }, [worldScores, selectedWorld, selectedMascot, bestCombo]);
+    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo, unlocked: unlockedWorlds });
+  }, [worldScores, selectedWorld, selectedMascot, bestCombo, unlockedWorlds]);
 
   const [score, setScore] = useState(0);
   const [playerY, setPlayerY] = useState(SCREEN_H * 0.5);
@@ -875,6 +919,7 @@ export default function App() {
   const [meteors, setMeteors] = useState([]);
   const [combo, setCombo] = useState({ count: 0, multiplier: 1, best: 0 });
   const [popups, setPopups] = useState([]);
+  const [eventView, setEventView] = useState(null);
 
   const gameRef = useRef({
     playerY: SCREEN_H * 0.5, velY: 0, gravityDown: true,
@@ -886,7 +931,7 @@ export default function App() {
   const squashAnim = useRef(new Animated.Value(1)).current;
 
   const world = WORLDS[selectedWorld];
-  const locked = !isWorldUnlocked(selectedWorld, worldScores);
+  const locked = !isWorldUnlocked(selectedWorld, worldScores, unlockedWorlds);
 
   const doSquash = useCallback(() => {
     squashAnim.setValue(0.65);
@@ -916,6 +961,9 @@ export default function App() {
     g.course = createCourse(w, SCREEN_H);
     g.collected = [];
     g.combo = createCombo();
+    g.director = createDirector(w.id);
+    g.challenge = null;
+    g.nextShowerAt = Infinity;
     g.onPlatform = false;
     g.trail = [];
     g.totalScroll = 0;
@@ -938,6 +986,7 @@ export default function App() {
     setCollected([]);
     setCombo({ count: 0, multiplier: 1, best: 0 });
     setPopups([]);
+    setEventView(null);
     setBursts([]);
     setFlipCount(0);
     setTrail([]);
@@ -998,12 +1047,32 @@ export default function App() {
       g.frameCount++;
       const beforeTime = g.elapsed;
       g.elapsed += dt / 60;
-      g.scrollSpeed = w.id === 'nebulosa'
+      const directorStep = updateDirector(g.director, g.elapsed);
+      if (directorStep === 'start') {
+        const type = g.director.active.type;
+        showPopup(EVENTS[type].hint, '#ffffff');
+        if (type === 'mascotte') g.course.forceItems = true;
+        if (type === 'sciame') g.nextShowerAt = g.elapsed;
+        if (type === 'sfida') {
+          g.course.challengeRequested = true;
+          g.challenge = { started: false, firstId: null, resetsAt: 0 };
+        }
+      }
+      if (directorStep === 'end') {
+        g.course.forceItems = false;
+        g.nextShowerAt = Infinity;
+        g.challenge = null;
+      }
+      const event = g.director.active;
+      g.scrollSpeed = (w.id === 'nebulosa'
         ? w.scrollSpeed + Math.min(1.5, Math.max(0, g.elapsed - 10) * .055)
-        : Math.min(w.scrollSpeed * 1.5, w.scrollSpeed + g.elapsed * 60 * w.scrollIncrement);
+        : Math.min(w.scrollSpeed * 1.5, w.scrollSpeed + g.elapsed * 60 * w.scrollIncrement))
+        * (event?.type === 'corsa' ? RUSH_SPEED : 1);
+      const lowGravity = event?.type === 'leggera';
+      const bounceBase = w.bounceVel * (lowGravity ? LOW_GRAVITY_BOUNCE : 1);
       const previousY = g.playerY;
 
-      const grav = (g.gravityDown ? w.gravity : -w.gravity) * gravityFactor(w.id, g.elapsed);
+      const grav = (g.gravityDown ? w.gravity : -w.gravity) * gravityFactor(w.id, g.elapsed) * (lowGravity ? LOW_GRAVITY : 1);
       if (!g.onPlatform) g.velY += grav * dt;
       const maxVelocity = w.id === 'asteroidi' ? 18 : 14;
       g.velY = Math.max(-maxVelocity, Math.min(maxVelocity, g.velY));
@@ -1016,6 +1085,12 @@ export default function App() {
         g.platforms[i].previousY = g.platforms[i].y;
         g.platforms[i].y = platformY(g.platforms[i], g.elapsed);
         g.platforms[i].x -= scrollAmt;
+        const ch = g.challenge;
+        if (ch && g.platforms[i].challenge && !ch.started && g.platforms[i].x < playerX + PLAYER_SIZE) {
+          ch.started = true;
+          ch.firstId = g.platforms[i].id;
+          ch.resetsAt = g.combo.resets;
+        }
         if (g.platforms[i].x + g.platforms[i].w < playerX && passCombo(g.combo, g.platforms[i])) {
           showPopup('Combo persa', '#ff9a9a');
         }
@@ -1051,7 +1126,7 @@ export default function App() {
         if (g.gravityDown) {
           if (g.velY >= 0 && pBottom >= plat.y && previousY + PLAYER_SIZE <= (plat.previousY ?? plat.y) + 4) {
             g.playerY = plat.y - PLAYER_SIZE;
-            g.velY = bounceVelocity(w.bounceVel, plat.type, true);
+            g.velY = bounceVelocity(bounceBase, plat.type, true);
             g.onPlatform = true;
             landed = plat;
             if (plat.type === 'crumble' && plat.hitAt == null) plat.hitAt = g.elapsed;
@@ -1060,7 +1135,7 @@ export default function App() {
         } else {
           if (g.velY <= 0 && pTop <= plat.y + PLATFORM_H && previousY >= (plat.previousY ?? plat.y) + PLATFORM_H - 4) {
             g.playerY = plat.y + PLATFORM_H;
-            g.velY = bounceVelocity(w.bounceVel, plat.type, false);
+            g.velY = bounceVelocity(bounceBase, plat.type, false);
             g.onPlatform = true;
             landed = plat;
             if (plat.type === 'crumble' && plat.hitAt == null) plat.hitAt = g.elapsed;
@@ -1089,21 +1164,40 @@ export default function App() {
         else if (result === 'edge') showPopup('Sul bordo!', '#ff9a9a');
       }
 
+      // La sfida si chiude quando la piattaforma di recupero successiva supera il giocatore.
+      const ch = g.challenge;
+      if (ch?.started && g.platforms.some(p => p.recovery && p.id > ch.firstId && p.x < playerX)) {
+        if (g.combo.resets === ch.resetsAt) {
+          const bonus = 50 * g.combo.multiplier;
+          g.score += bonus;
+          setScore(g.score);
+          showPopup(`Sfida superata! +${bonus}`, '#ffd76a');
+        } else {
+          showPopup('Sfida fallita', '#ff9a9a');
+        }
+        g.challenge = null;
+        endEvent(g.director, g.elapsed);
+      }
+
       // Keep the first bounce, then remove touched fragile platforms before rendering.
       // This applies to both upper and lower contact, with no second landing window.
       g.platforms = g.platforms.filter(plat => plat.hitAt == null);
 
       g.scoreClock += dt;
       if (g.scoreClock >= 10) {
-        g.score += Math.floor(g.scoreClock / 10) * g.combo.multiplier;
+        g.score += Math.floor(g.scoreClock / 10) * g.combo.multiplier * (event?.type === 'corsa' ? 2 : 1);
         g.scoreClock %= 10;
         setScore(g.score);
       }
 
-      if (w.id === 'buconero') {
-        if (g.elapsed >= g.nextMeteorAt) {
+      if (w.id === 'buconero' || g.meteors.length || event?.type === 'sciame') {
+        if (w.id === 'buconero' && g.elapsed >= g.nextMeteorAt) {
           g.meteors.push(createMeteor(++g.meteorId, g.elapsed, SCREEN_W, SCREEN_H, g.playerY + PLAYER_SIZE / 2));
           g.nextMeteorAt = g.elapsed + Math.max(3.5, 6 - g.elapsed / 60) + Math.random();
+        }
+        if (event?.type === 'sciame' && g.elapsed >= g.nextShowerAt) {
+          g.meteors.push(createMeteor(++g.meteorId, g.elapsed, SCREEN_W, SCREEN_H, g.playerY + PLAYER_SIZE / 2));
+          g.nextShowerAt = g.elapsed + 1.1 + Math.random() * .5;
         }
         if (g.meteors.some(m => meteorHitsPlayer(m, beforeTime, g.elapsed, playerX, previousY, g.playerY, PLAYER_SIZE))) {
           gameOver();
@@ -1128,6 +1222,16 @@ export default function App() {
         return;
       }
 
+      const d = g.director;
+      const shown = d.active || d.pending
+        ? { type: d.active ? d.active.type : d.pending, phase: d.active ? 'active' : 'warning', progress: eventProgress(d, g.elapsed) }
+        : null;
+      setEventView(prev => {
+        if (!shown || !prev) return shown === prev ? prev : shown;
+        const same = prev.type === shown.type && prev.phase === shown.phase
+          && (shown.progress == null || Math.abs((prev.progress ?? 0) - shown.progress) < .02);
+        return same ? prev : shown;
+      });
       const c = g.combo;
       setCombo(prev => prev.count === c.count && prev.multiplier === c.multiplier ? prev : { count: c.count, multiplier: c.multiplier, best: c.best });
       setPlayerY(g.playerY);
@@ -1156,6 +1260,7 @@ export default function App() {
           selectedWorldIdx={selectedWorld}
           selectedMascot={selectedMascot}
           worldScores={worldScores}
+          unlockedWorlds={unlockedWorlds}
           locked={locked}
           onStart={startGame}
           onPrevWorld={() => setSelectedWorld(i => Math.max(0, i - 1))}
@@ -1190,6 +1295,7 @@ export default function App() {
         <ProfileScreen
           selectedMascot={selectedMascot}
           worldScores={worldScores}
+          unlockedWorlds={unlockedWorlds}
           bestCombo={bestCombo}
           onBack={() => setScreen('menu')}
           onCharacters={() => setScreen('characters')}
@@ -1229,7 +1335,7 @@ export default function App() {
 
           {platforms.map(p => (
             <React.Fragment key={p.id}>
-              <PlatformBlock x={p.x} y={p.y} w={p.w} colorIdx={p.colorIdx} type={p.type} hitAt={p.hitAt} onSweep={() => sweepAway(p.id)} asteroidWorld={world.id === 'asteroidi'} />
+              <PlatformBlock x={p.x} y={p.y} w={p.w} colorIdx={p.colorIdx} type={p.type} hitAt={p.hitAt} challenge={p.challenge} onSweep={() => sweepAway(p.id)} asteroidWorld={world.id === 'asteroidi'} />
               {p.hasCollectible && !p.collected && (
                 <CollectibleBlob
                   source={MASCOTS[p.collectibleMascot]}
@@ -1257,7 +1363,7 @@ export default function App() {
             <CollectBurst key={b.id} x={b.x} y={b.y} onDone={() => removeBurst(b.id)} />
           ))}
 
-          {world.id === 'buconero' && <MeteorField meteors={meteors} elapsed={gameRef.current.elapsed} width={SCREEN_W} />}
+          {meteors.length > 0 && <MeteorField meteors={meteors} elapsed={gameRef.current.elapsed} width={SCREEN_W} />}
           <FlipFlash trigger={flipCount} />
 
           <View style={gs.hud}>
@@ -1265,10 +1371,13 @@ export default function App() {
               <Text style={gs.scoreLabel}>PUNTI</Text>
               <ScorePop value={score} />
             </View>
+            <EventBanner view={eventView} accent={world.accentEmphasis} />
             <GravityIndicator down={gravityDown} />
           </View>
           <View pointerEvents="none" style={gs.comboArea}>
             <ComboPill count={combo.count} multiplier={combo.multiplier} accent={world.accentEmphasis} />
+          </View>
+          <View pointerEvents="none" style={gs.popupArea}>
             {popups.map(p => (
               <FloatText key={p.id} text={p.text} color={p.color} onDone={() => setPopups(prev => prev.filter(x => x.id !== p.id))} />
             ))}
@@ -1528,7 +1637,22 @@ const gs = StyleSheet.create({
   comboCount: { fontSize: 8, fontWeight: '800', letterSpacing: 1.2, color: 'rgba(255,255,255,0.8)' },
   comboTrack: { height: 3, width: 56, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', marginTop: 4, overflow: 'hidden' },
   comboFill: { height: 3, borderRadius: 2 },
+  popupArea: {
+    position: 'absolute', top: (Platform.OS === 'ios' ? 54 : 32) + 96,
+    left: 24, right: 24, alignItems: 'center',
+  },
+  eventArea: { flex: 1, alignItems: 'center', marginHorizontal: 8 },
+  eventPill: {
+    alignItems: 'center', maxWidth: '100%',
+    backgroundColor: 'rgba(16,10,28,0.45)',
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, borderWidth: 1,
+  },
+  eventEyebrow: { fontSize: 7, fontWeight: '800', letterSpacing: 1.5, color: 'rgba(255,255,255,0.6)' },
+  eventTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 1, color: '#fff', marginTop: 1 },
+  eventTrack: { height: 2, width: 70, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginTop: 4, overflow: 'hidden' },
+  eventFill: { height: 2, borderRadius: 1 },
   floatText: {
+    textAlign: 'center',
     marginTop: 8, fontSize: 15, fontWeight: '900', letterSpacing: .5,
     textShadowColor: 'rgba(0,0,0,0.45)', textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 },
   },

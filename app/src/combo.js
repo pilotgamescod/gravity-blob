@@ -20,7 +20,7 @@ export function comboProgress(count) {
 }
 
 export function createCombo() {
-  return { count: 0, best: 0, multiplier: 1, boostGrace: false };
+  return { count: 0, best: 0, multiplier: 1, boostGrace: false, resets: 0 };
 }
 
 // Primo contatto con una piattaforma. centered: il centro del blob è sopra la piattaforma.
@@ -33,6 +33,7 @@ export function landCombo(combo, platform, centered = true) {
   combo.boostGrace = platform.type === 'boost';
   if (!centered) {
     const broke = combo.count > 0;
+    combo.resets++;
     combo.count = 0;
     combo.multiplier = 1;
     return broke ? 'edge' : null;
@@ -55,6 +56,7 @@ export function passCombo(combo, platform) {
     return false;
   }
   const hadMultiplier = combo.multiplier > 1;
+  combo.resets++;
   combo.count = 0;
   combo.multiplier = 1;
   return hadMultiplier;

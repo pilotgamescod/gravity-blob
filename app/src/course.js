@@ -36,9 +36,10 @@ export function eligibleChunks(rules, tier) {
 
 // Pesca pesata: blocchi del livello attuale più probabili, niente ripetizioni ravvicinate,
 // bonus ai blocchi con meccaniche che non si vedono da un po'.
-function pickChunk(course, rules, tier) {
+function pickChunk(course, rules, tier, hardOnly = false) {
   const { random, index } = course;
   let pool = eligibleChunks(rules, tier);
+  if (hardOnly) pool = pool.filter(c => c.tier === Math.max(...pool.map(p => p.tier)));
   const fresh = pool.filter(c => !course.recent.includes(c.id));
   if (fresh.length) pool = fresh;
   const weights = pool.map(c => {
@@ -70,8 +71,12 @@ export function nextPlatform(course, previous) {
   const tier = courseTier(rules, course.elapsed || 0);
 
   if (!course.queue.length) {
-    const chunk = pickChunk(course, rules, tier);
+    // Tratto sfida: un blocco del livello successivo, fra i più difficili disponibili.
+    const challenge = !!course.challengeRequested;
+    course.challengeRequested = false;
+    const chunk = pickChunk(course, rules, challenge ? Math.min(MAX_TIER, tier + 1) : tier, challenge);
     course.chunk = chunk.id;
+    course.challengeChunk = challenge;
     course.recent = [...course.recent, chunk.id].slice(-RECENT_CHUNKS);
     // Ogni blocco parte da una piattaforma normale e larga su cui riprendere il ritmo.
     course.queue = [[chunk.steps[0][0], 'n', 'recovery'], ...chunk.steps];
@@ -102,7 +107,8 @@ export function nextPlatform(course, previous) {
     id: index + 1, x: previous.x + previous.w + gap,
     y: baseY, baseY, w, type, amplitude: type === 'moving' ? 18 + difficulty * 12 : 0,
     phase: random() * Math.PI * 2, sector, stage: tier, chunk: course.chunk, recovery, collected: false,
-    hasCollectible: opts.includes('item'), collectibleMascot: Math.floor(random() * 14),
+    challenge: course.challengeChunk && !recovery,
+    hasCollectible: opts.includes('item') || (!!course.forceItems && index > 3), collectibleMascot: Math.floor(random() * 14),
     colorIdx: ['nebulosa','asteroidi','buconero','supernova'].indexOf(world.id),
   };
 }

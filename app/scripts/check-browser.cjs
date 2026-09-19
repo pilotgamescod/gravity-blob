@@ -48,7 +48,7 @@ const server = http.createServer((req,res) => {
       }
       throw new Error('Game hooks not found');
     };
-    window.testHooks().scores.queue.dispatch({nebulosa:100,asteroidi:100,buconero:100,supernova:0});
+    window.testHooks().scores.queue.dispatch({nebulosa:1000,asteroidi:1000,buconero:1000,supernova:0});
   });
   await page.getByText('›',{exact:true}).click();
   const playWorld = async () => {

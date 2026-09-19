@@ -15,6 +15,22 @@ Meccaniche per mondo (tra parentesi il livello da cui compaiono):
 - Buco nero: gravità pulsante e meteore letali (dopo 6 secondi, con 1,25 secondi di avviso, traiettoria fissa, solo il nucleo uccide). Piattaforme mobili (1) e molle (3).
 - Supernova: piattaforme ⋯ che spariscono subito dopo il primo rimbalzo, da entrambi i lati. Piattaforme mobili (2) e molle (3).
 
+## Eventi
+
+Dal diciottesimo secondo arriva un evento ogni 16–24 secondi, annunciato 2 secondi prima in alto. Gli eventi alternano tensione e respiro e non si ripetono due volte di fila (`src/events.js`):
+
+- **Sciame di meteore** (tensione, 9 s): meteore ogni 1,1–1,6 secondi, anche fuori da Buco nero. Chi le sfiora prende il bonus "Di un soffio".
+- **Corsa** (tensione, 7 s): velocità +20%, punti tempo doppi.
+- **Tratto sfida** (tensione): arriva un blocco del livello successivo con piattaforme dorate. Superarlo senza perdere il combo vale 50 punti per il moltiplicatore.
+- **Gravità leggera** (respiro, 8 s): gravità al 60%, salti più lenti.
+- **Pioggia di mascotte** (respiro, 8 s): una mascotte su ogni piattaforma nuova.
+
+Nebulosa non ha lo sciame, Buco nero non ha la gravità leggera (ha già la sua gravità pulsante). Con il simulatore della fisica, corsa e gravità leggera restano superabili senza perdere il combo anche se durano tutta la partita.
+
+## Sblocco dei mondi
+
+Asteroidi si sblocca con 300 punti in Nebulosa, Buco nero con 450 in Asteroidi, Supernova con 600 in Buco nero: con un gioco medio servono circa 30–60 secondi nel mondo precedente, con combo alti meno. Un mondo sbloccato resta sbloccato; i salvataggi precedenti mantengono i mondi aperti con le vecchie soglie (40/60/80).
+
 ## Punti e combo
 
 - Si guadagnano punti col tempo (circa 6 al secondo) e raccogliendo mascotte (10 punti).
@@ -37,7 +53,7 @@ Il parametro seed di `createCourse` permette di riprodurre un percorso per debug
 
 ## Verifiche
 
-- `npm test`: riproducibilità, varietà, limiti geometrici su quattro dimensioni, validità dei blocchi, livelli, meccaniche per mondo, combo, passaggi ravvicinati e gravità.
+- `npm test`: riproducibilità, varietà, limiti geometrici su quattro dimensioni, validità dei blocchi, livelli, meccaniche per mondo, combo, passaggi ravvicinati, eventi, tratti sfida e gravità.
 - `npx expo export --platform web --output-dir /tmp/gravity-blob-preview`
 - `npm run test:browser`: richiede Chrome installato e l'export precedente; verifica menu, avvio, morte, riprova e ritorno al menu. Screenshot in `/tmp/gravity-menu.png` e `/tmp/gravity-playing.png`.
 - `npx expo export --platform ios`: verifica il bundle nativo; non sostituisce una prova su iPhone.
