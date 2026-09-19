@@ -52,6 +52,13 @@ test('mascot abilities: starting combo and one forgiven break', () => {
   assert.deepEqual([c.count, c.multiplier, c.resets], [0, 1, 1]);
 });
 
+test('skipping a pulsar never breaks the combo', () => {
+  const c = createCombo();
+  for (let id = 0; id < 5; id++) landCombo(c, { id });
+  assert.equal(passCombo(c, { id: 9, type: 'pulsar' }), null);
+  assert.equal(c.count, 5);
+});
+
 test('a spring forgives exactly one skipped platform', () => {
   const c = createCombo();
   landCombo(c, { id: 1, type: 'boost' });

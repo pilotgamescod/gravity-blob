@@ -256,6 +256,27 @@ export const sfx = {
     if (!ready('unlock')) return;
     [12, 16, 19, 24].forEach((n, i) => tone({ freq: semis(523.25, n), type: 'sine', dur: .25, vol: .1, delay: .3 + i * .09 }));
   },
+  ring(chain) {
+    if (!ready('ring', .05)) return;
+    const v = voice();
+    const n = Math.min(chain, 6) * 2;
+    tone({ freq: semis(v.root, 12 + n), type: 'sine', dur: .22, vol: .13 });
+    tone({ freq: semis(v.root, 19 + n), type: 'sine', dur: .3, vol: .08, delay: .05 });
+  },
+  rockFall() {
+    if (!ready('rockFall', .1)) return;
+    noise({ dur: .35, vol: .12, freq: 900, to: 120 });
+    tone({ freq: 120, to: 50, type: 'triangle', dur: .35, vol: .12, delay: .25 });
+  },
+  eruptionWarn() {
+    if (!ready('eruptionWarn', .3)) return;
+    noise({ dur: .5, vol: .06, freq: 200, to: 1200, filter: 'bandpass', q: 3 });
+  },
+  eruption() {
+    if (!ready('eruption', .1)) return;
+    noise({ dur: .4, vol: .14, freq: 400, to: 3000, filter: 'bandpass', q: 1.2 });
+    tone({ freq: 90, to: 260, type: 'sawtooth', dur: .25, vol: .05 });
+  },
   tap() {
     if (!ready('tap', .05)) return;
     tone({ freq: 660, to: 520, type: 'sine', dur: .06, vol: .08 });

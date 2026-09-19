@@ -7,12 +7,13 @@
 //   steps  piattaforme dopo quella di recupero iniziale, ciascuna [quota, tipo, opzioni]
 //     quota    0 = in alto, 1 = in basso, rispetto all'area giocabile
 //     tipo     'n' normale, 'x' una meccanica qualsiasi del mondo corrente,
-//              oppure una meccanica precisa: moving, sweep, soft, boost, crumble
+//              oppure una meccanica precisa: moving, sweep, soft, boost, crumble, falling, pulsar
 //     opzioni  stringa con parole separate da spazi:
-//              item (mascotte da raccogliere), wide/narrow (larghezza), short/long (distanza)
+//              item (mascotte da raccogliere), wide/narrow (larghezza), short/long (distanza),
+//              ring (anello di luce nello spazio prima della piattaforma)
 //
 // Un blocco che usa una meccanica precisa compare solo nei mondi che la prevedono
-// (vedi WORLD_RULES in course.js), dal livello in cui il mondo la sblocca.
+// (vedi RULES in course.js), dal livello in cui il mondo la sblocca.
 // La quota finale viene sempre limitata dal dislivello massimo consentito.
 
 export const CHUNKS = [
@@ -22,6 +23,7 @@ export const CHUNKS = [
   { id: 'scala-giu', tier: 0, steps: [[.38, 'n'], [.46, 'x', 'item'], [.54, 'n'], [.62, 'x', 'item'], [.56, 'n']] },
   { id: 'onda', tier: 0, steps: [[.5, 'n'], [.62, 'x', 'item'], [.5, 'n'], [.38, 'x', 'item'], [.5, 'n'], [.6, 'x']] },
   { id: 'nuvole', tier: 0, steps: [[.5, 'n'], [.5, 'soft', 'item'], [.6, 'n'], [.44, 'soft'], [.52, 'n', 'item']] },
+  { id: 'anelli', tier: 0, steps: [[.5, 'n'], [.42, 'n', 'ring'], [.58, 'n', 'ring item'], [.42, 'x', 'ring'], [.54, 'n', 'item']] },
   { id: 'crollo', tier: 0, steps: [[.55, 'n'], [.46, 'crumble', 'item'], [.56, 'crumble'], [.46, 'crumble', 'item'], [.54, 'n']] },
 
   // ── Livello 1 ──
@@ -31,6 +33,8 @@ export const CHUNKS = [
   { id: 'doppietta', tier: 1, steps: [[.5, 'n'], [.5, 'x', 'item'], [.58, 'x'], [.46, 'n', 'item'], [.52, 'x']] },
   { id: 'trampolini', tier: 1, steps: [[.62, 'n'], [.66, 'boost', 'item'], [.4, 'n'], [.64, 'boost'], [.38, 'n', 'item'], [.5, 'x']] },
   { id: 'ingorgo', tier: 1, steps: [[.5, 'n'], [.5, 'sweep'], [.46, 'n', 'item'], [.54, 'sweep'], [.5, 'sweep', 'item'], [.48, 'n']] },
+  { id: 'frana', tier: 1, steps: [[.55, 'n'], [.5, 'falling', 'item'], [.6, 'falling'], [.45, 'n', 'item'], [.55, 'falling']] },
+  { id: 'metronomo', tier: 1, steps: [[.5, 'n'], [.5, 'pulsar', 'item'], [.54, 'pulsar'], [.48, 'pulsar', 'item'], [.5, 'n']] },
   { id: 'giostra', tier: 1, steps: [[.5, 'n'], [.44, 'moving', 'item'], [.56, 'moving'], [.48, 'moving', 'item'], [.52, 'n']] },
 
   // ── Livello 2 ──
@@ -40,6 +44,8 @@ export const CHUNKS = [
   { id: 'salto-lungo', tier: 2, steps: [[.5, 'n'], [.5, 'n', 'long item'], [.52, 'x'], [.48, 'n', 'long'], [.5, 'x', 'item']] },
   { id: 'serpente', tier: 2, steps: [[.45, 'n'], [.58, 'x'], [.66, 'n', 'item'], [.54, 'x'], [.4, 'n'], [.32, 'x', 'item'], [.44, 'n']] },
   { id: 'nuvole-mobili', tier: 2, steps: [[.5, 'n'], [.44, 'soft', 'item'], [.56, 'moving'], [.48, 'soft'], [.52, 'moving', 'item']] },
+  { id: 'valanga', tier: 2, steps: [[.4, 'n'], [.5, 'falling'], [.6, 'falling', 'item'], [.7, 'falling'], [.6, 'n', 'item'], [.5, 'falling', 'ring']] },
+  { id: 'arcobaleno', tier: 2, steps: [[.6, 'n'], [.4, 'x', 'ring'], [.66, 'n', 'ring item'], [.36, 'x', 'ring'], [.62, 'n', 'ring item']] },
   { id: 'cantiere', tier: 2, steps: [[.55, 'n'], [.45, 'moving', 'item'], [.6, 'sweep'], [.4, 'boost'], [.58, 'soft', 'item'], [.48, 'moving']] },
 
   // ── Livello 3 ──
@@ -47,6 +53,7 @@ export const CHUNKS = [
   { id: 'montagne-russe', tier: 3, steps: [[.7, 'n'], [.4, 'x', 'long item'], [.68, 'n'], [.34, 'x', 'long'], [.66, 'n', 'item'], [.38, 'x']] },
   { id: 'tutto-mondo', tier: 3, steps: [[.5, 'x'], [.58, 'x', 'item'], [.44, 'x'], [.6, 'x', 'item'], [.42, 'x'], [.52, 'x']] },
   { id: 'molla-e-crollo', tier: 3, steps: [[.62, 'n'], [.62, 'boost'], [.38, 'crumble', 'item'], [.6, 'crumble'], [.4, 'boost', 'item'], [.5, 'n']] },
+  { id: 'ritmo-orbitale', tier: 3, steps: [[.4, 'pulsar'], [.6, 'pulsar', 'item'], [.42, 'moving'], [.62, 'pulsar'], [.5, 'pulsar', 'item ring']] },
   { id: 'nuvole-e-molle', tier: 3, steps: [[.5, 'soft'], [.62, 'boost', 'item'], [.36, 'soft'], [.6, 'boost'], [.44, 'sweep', 'item'], [.52, 'moving']] },
 
   // ── Livello 4 ──

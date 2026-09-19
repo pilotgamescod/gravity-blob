@@ -10,10 +10,10 @@ I quattro mondi condividono il comando di inversione della gravità. Ogni percor
 
 Meccaniche per mondo (tra parentesi il livello da cui compaiono):
 
-- Nebulosa: solo piattaforme normali; la difficoltà viene dai cambi di quota e dalla velocità crescente.
-- Asteroidi: piattaforme metalliche mobili, blocchi rosa eliminabili con un tocco (il tocco non inverte la gravità), nuvole che annullano il rimbalzo, molle verdi con spinta aumentata del 70%.
-- Buco nero: gravità pulsante e meteore letali (dopo 6 secondi, con 1,25 secondi di avviso, traiettoria fissa, solo il nucleo uccide). Piattaforme mobili (1) e molle (3).
-- Supernova: piattaforme ⋯ che spariscono subito dopo il primo rimbalzo, da entrambi i lati. Piattaforme mobili (2) e molle (3).
+- Nebulosa: solo piattaforme normali e molti anelli di luce; la difficoltà viene dai cambi di quota e dalla velocità crescente.
+- Asteroidi: rocce cadenti (1), piattaforme metalliche mobili, blocchi rosa eliminabili con un tocco (il tocco non inverte la gravità), nuvole che annullano il rimbalzo, molle verdi con spinta aumentata del 70%.
+- Buco nero: pulsar (1), gravità pulsante e meteore letali (dopo 6 secondi, con 1,25 secondi di avviso, traiettoria fissa, solo il nucleo uccide). Piattaforme mobili (1) e molle (3).
+- Supernova: piattaforme ⋯ che spariscono subito dopo il primo rimbalzo, da entrambi i lati; eruzioni (1). Piattaforme mobili (2) e molle (3).
 
 ## Eventi
 
@@ -66,6 +66,15 @@ Asteroidi si sblocca con 300 punti in Nebulosa, Buco nero con 450 in Asteroidi, 
 - Il combo migliore compare a fine partita e nel profilo, ed è salvato con gli altri progressi.
 
 Taratura fatta con un simulatore della fisica: un giocatore che pensa solo a sopravvivere salta circa una piattaforma su tre e atterra sul bordo nel 35% dei casi (combo medio intorno a 1); uno preciso può tenere il combo per tutta la partita in ogni mondo.
+
+**Novità di ogni mondo** (compaiono con una presentazione la prima volta in partita):
+
+- Nebulosa, **anelli di luce**: sospesi negli spazi fra le piattaforme, sopra o sotto il percorso (30% degli spazi, 10% negli altri mondi). Attraversarli vale 5 punti per il moltiplicatore, di più se presi di fila (fino a x5).
+- Asteroidi, **rocce cadenti** (dal livello 1): dopo il primo tocco tremano per 0,3 secondi e precipitano; mentre cadono non trattengono chi arriva da sotto.
+- Buco nero, **pulsar** (dal livello 1): accese per il 70% di un ciclo di due battiti della musica, alternate fra piattaforme vicine; spente sono attraversabili. Saltarne una non rompe il combo.
+- Supernova, **eruzioni** (dal livello 1): palle di fuoco verticali dal basso o dall'alto, annunciate per 1,1 secondi da un bagliore sul bordo che scorre con il mondo; una ogni 2,4–7 secondi a seconda del livello. Si possono schivare e sfiorarle vale il bonus "Di un soffio".
+
+Verificate con il simulatore della fisica: un giocatore preciso supera ogni mondo senza perdere il combo anche con le novità attive; un giocatore fermo verrebbe colpito da circa un'eruzione su tre.
 
 L'indicatore dei settori misura la distanza percorsa (2.400 unità per settore).
 

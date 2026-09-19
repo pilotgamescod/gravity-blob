@@ -14,7 +14,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { RULES, courseTier, createCourse, nextPlatform, platformY, gravityFactor, bounceVelocity, sweepPlatform } from './src/course';
+import { RULES, courseTier, createCourse, nextPlatform, platformY, gravityFactor, bounceVelocity, sweepPlatform, platformSolid, pulsarPhase, PULSAR_SOLID, RING_RADIUS } from './src/course';
+import { createEruption, eruptionPosition, eruptionHitsPlayer, eruptionNearMiss, eruptionGone, eruptionGap, ERUPTION_WARNING } from './src/eruptions';
 import { WorldScene, WORLD_ART } from './src/WorldScene';
 import { DeepSpace, MeteorField } from './src/DeepSpace';
 import { createMeteor, meteorPosition, meteorHitsPlayer, meteorNearMiss } from './src/meteors';
@@ -145,6 +146,14 @@ const PLATFORM_COLORS = [
   { bg: '#0984E3', border: '#74B9FF', glow: 'rgba(9,132,227,0.3)' },
   { bg: '#FDCB6E', border: '#FFEAA7', glow: 'rgba(253,203,110,0.3)' },
 ];
+
+// Presentazioni delle novità, mostrate la prima volta che compaiono in una partita.
+const PLATFORM_INTROS = {
+  falling: 'Rocce cadenti: rimbalza e scappa!',
+  pulsar: 'Pulsar: atterra quando sono accese',
+};
+const RING_INTRO = 'Anelli di luce: attraversali!';
+const ERUPTION_INTRO = 'Eruzioni: guarda il bagliore sul bordo';
 
 function randomBetween(a, b) { return a + Math.random() * (b - a); }
 
@@ -423,6 +432,46 @@ function EventBanner({ view, accent }) {
   );
 }
 
+// ── Anelli di luce ──
+
+function LightRing({ x, y, color }) {
+  const size = RING_RADIUS * 2;
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: x - RING_RADIUS, top: y - RING_RADIUS, width: size, height: size }}>
+      <View style={{ position: 'absolute', inset: -7, borderRadius: size, borderWidth: 7, borderColor: '#fff2a840' }} />
+      <View style={{ position: 'absolute', inset: 0, borderRadius: size, borderWidth: 4, borderColor: '#ffe27a' }} />
+      <View style={{ position: 'absolute', inset: 6, borderRadius: size, borderWidth: 1.5, borderColor: color }} />
+    </View>
+  );
+}
+
+// ── Eruzioni ──
+
+function EruptionField({ eruptions, elapsed, height }) {
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {eruptions.map(e => {
+        const p = eruptionPosition(e, elapsed);
+        if (!p.active) {
+          const k = Math.min(1, (elapsed - e.born) / ERUPTION_WARNING);
+          return (
+            <LinearGradient key={e.id}
+              colors={e.fromTop ? ['#ff8a3ddd', '#ff8a3d00'] : ['#ff8a3d00', '#ff8a3ddd']}
+              style={{ position: 'absolute', left: p.x - 18, width: 36, height: 70 + k * 60, top: e.fromTop ? 0 : height - 70 - k * 60, opacity: .35 + .5 * Math.abs(Math.sin(elapsed * 14)) }} />
+          );
+        }
+        return (
+          <View key={e.id} style={{ position: 'absolute', left: p.x - e.radius, top: p.y - e.radius, width: e.radius * 2, height: e.radius * 2 }}>
+            <LinearGradient colors={e.fromTop ? ['transparent', '#ff7a3a88'] : ['#ff7a3a88', 'transparent']}
+              style={{ position: 'absolute', left: 4, width: e.radius * 2 - 8, height: 90, top: e.fromTop ? -90 + e.radius : e.radius, borderRadius: 12 }} />
+            <LinearGradient colors={['#fff3c4', '#ffab4a', '#d9442b']} style={{ width: e.radius * 2, height: e.radius * 2, borderRadius: e.radius, borderWidth: 2, borderColor: '#ffe3a1' }} />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // ── Collectible blob ──
 
 function CollectibleBlob({ source, left, top }) {
@@ -452,16 +501,19 @@ function CollectibleBlob({ source, left, top }) {
 
 // ── Platform ──
 
-function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld, challenge }) {
+function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld, challenge, ghost, flicker }) {
   const special = {
     moving: { bg: '#a47a39', border: '#f7d79d', glow: '#b8893c40' },
     sweep: { bg: '#bc526c', border: '#ffb7ce', glow: '#bc526c40' },
     soft: { bg: '#e1eef6', border: '#ffffff', glow: '#c0d9ee30' },
     boost: { bg: '#358b70', border: '#a5ffcf', glow: '#358b7040' },
+    falling: { bg: '#7b6752', border: '#e2c9a6', glow: '#7b675240' },
+    pulsar: { bg: '#4b3aa8', border: '#c9bcff', glow: '#8f7bff66' },
   };
   const c = special[type] || PLATFORM_COLORS[colorIdx] || PLATFORM_COLORS[0];
+  const pulsarOpacity = type === 'pulsar' ? (ghost ? .22 : flicker ? .55 : 1) : 1;
   return (
-    <>
+    <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, top: 0, opacity: pulsarOpacity }}>
       <View style={{
         position: 'absolute', left: x + 4, top: y + PLATFORM_H + 2,
         width: w - 8, height: 8, borderRadius: 6, backgroundColor: c.glow,
@@ -470,6 +522,7 @@ function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld,
         position: 'absolute', left: x, top: y, width: w, height: PLATFORM_H,
         borderRadius: type === 'crumble' ? 4 : PLATFORM_H / 2, backgroundColor: hitAt != null ? '#ff926a' : c.bg,
         borderWidth: challenge ? 2 : 1, borderColor: challenge ? '#ffd76a' : c.border, overflow: 'hidden',
+        borderStyle: ghost ? 'dashed' : 'solid',
       }}>
         <View style={{
           position: 'absolute', top: 0, left: 8, right: 8,
@@ -500,12 +553,20 @@ function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld,
           </View>)}
         </View>
       )}
+      {type === 'falling' && (
+        <View pointerEvents="none" style={{ position:'absolute', left:x, top:y, width:w, height:PLATFORM_H, flexDirection:'row', justifyContent:'space-around', alignItems:'center' }}>
+          {[0,1,2].map(i => <View key={i} style={{ width:i === 1 ? 10 : 6, height:2, backgroundColor:'#3f3226', transform:[{ rotate: `${[35,-20,50][i]}deg` }] }} />)}
+        </View>
+      )}
+      {type === 'pulsar' && !ghost && (
+        <View pointerEvents="none" style={{ position:'absolute', left:x - 4, top:y - 4, width:w + 8, height:PLATFORM_H + 8, borderRadius:12, borderWidth:2, borderColor:'#b7a6ff66' }} />
+      )}
       {type === 'sweep' && (
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Spazza via la piattaforma"
           onPress={event => { event.stopPropagation(); onSweep(); }}
           style={{ position: 'absolute', left: x, top: y - 14, width: w, height: 44 }} />
       )}
-    </>
+    </View>
   );
 }
 
@@ -1031,6 +1092,7 @@ export default function App() {
   const [combo, setCombo] = useState({ count: 0, multiplier: 1, best: 0 });
   const [popups, setPopups] = useState([]);
   const [eventView, setEventView] = useState(null);
+  const [eruptions, setEruptions] = useState([]);
 
   const gameRef = useRef({
     playerY: SCREEN_H * 0.5, velY: 0, gravityDown: true,
@@ -1080,6 +1142,12 @@ export default function App() {
     g.director = createDirector(w.id);
     g.challenge = null;
     g.nextShowerAt = Infinity;
+    g.eruptions = [];
+    g.eruptionId = 0;
+    g.nextEruptionAt = RULES[w.id].intro + 4;
+    g.ringChain = 0;
+    g.seen = new Set();
+    g.stats = { rings: 0, rocks: 0, pulsars: 0, eruptionsDodged: 0, nearMisses: 0, challengesWon: 0, events: 0 };
     g.onPlatform = false;
     g.trail = [];
     g.totalScroll = 0;
@@ -1103,6 +1171,7 @@ export default function App() {
     setCombo({ count: g.combo.count, multiplier: g.combo.multiplier, best: g.combo.best });
     setPopups([]);
     setEventView(null);
+    setEruptions([]);
     setBursts([]);
     setFlipCount(0);
     setTrail([]);
@@ -1178,6 +1247,7 @@ export default function App() {
       if (directorStep === 'start') {
         const type = g.director.active.type;
         sfx.eventStart(EVENTS[type].kind);
+        g.stats.events++;
         showPopup(EVENTS[type].hint, '#ffffff');
         if (type === 'mascotte') g.course.forceItems = true;
         if (type === 'sciame') g.nextShowerAt = g.elapsed;
@@ -1220,6 +1290,26 @@ export default function App() {
         g.platforms[i].previousY = g.platforms[i].y;
         g.platforms[i].y = platformY(g.platforms[i], g.elapsed);
         g.platforms[i].x -= scrollAmt;
+        const plat = g.platforms[i];
+        const intro = PLATFORM_INTROS[plat.type];
+        if (intro && !g.seen.has(plat.type) && plat.x < SCREEN_W - 40) { g.seen.add(plat.type); showPopup(intro, '#ffffff'); }
+        if (plat.ring && !g.seen.has('ring') && plat.x + plat.ring.dx < SCREEN_W - 40) { g.seen.add('ring'); showPopup(RING_INTRO, '#ffffff'); }
+        if (plat.ring && !plat.ring.passed && plat.x + plat.ring.dx <= playerX + PLAYER_SIZE / 2) {
+          plat.ring.passed = true;
+          if (Math.abs(g.playerY + PLAYER_SIZE / 2 - plat.ring.y) < RING_RADIUS + 8) {
+            plat.ring.taken = true;
+            g.ringChain++;
+            g.stats.rings++;
+            const bonus = 5 * Math.min(g.ringChain, 5) * g.combo.multiplier;
+            g.score += bonus;
+            setScore(g.score);
+            showPopup(g.ringChain > 1 ? `Anelli x${g.ringChain} +${bonus}` : `Anello +${bonus}`, '#bfe9ff');
+            setBursts(prev => [...prev, { x: plat.x + plat.ring.dx - 20, y: plat.ring.y - 20, id: Math.random() }]);
+            sfx.ring(g.ringChain);
+          } else {
+            g.ringChain = 0;
+          }
+        }
         const ch = g.challenge;
         if (ch && g.platforms[i].challenge && !ch.started && g.platforms[i].x < playerX + PLAYER_SIZE) {
           ch.started = true;
@@ -1260,7 +1350,10 @@ export default function App() {
         const overlapX = pRight > plat.x + 5 && pLeft < plat.x + plat.w - 5;
         if (!overlapX) continue;
 
-        if (g.gravityDown) {
+        const solid = platformSolid(plat, g.elapsed, !g.gravityDown);
+        if (!solid) {
+          // Pulsar spenta o roccia che precipita: si passa attraverso.
+        } else if (g.gravityDown) {
           if (g.velY >= 0 && pBottom >= plat.y && previousY + PLAYER_SIZE <= (plat.previousY ?? plat.y) + 4) {
             g.playerY = plat.y - PLAYER_SIZE;
             g.velY = bounceFor(plat.type, true);
@@ -1298,6 +1391,8 @@ export default function App() {
 
       if (landed) {
         const isNew = !landed.touched;
+        if (landed.type === 'falling' && landed.fallAt == null) { landed.fallAt = g.elapsed; g.stats.rocks++; sfx.rockFall(); }
+        if (landed.type === 'pulsar' && isNew) g.stats.pulsars++;
         if (landed.type === 'boost') sfx.boost();
         else if (landed.type === 'crumble') sfx.crumble();
         else if (landed.type === 'soft') { if (isNew || g.velY !== 0) sfx.soft(); }
@@ -1320,6 +1415,7 @@ export default function App() {
           setScore(g.score);
           showPopup(`Sfida superata! +${bonus}`, '#ffd76a');
           sfx.challengeWin();
+          g.stats.challengesWon++;
         } else {
           showPopup('Sfida fallita', '#ff9a9a');
           sfx.challengeFail();
@@ -1370,10 +1466,47 @@ export default function App() {
             setScore(g.score);
             showPopup(`Di un soffio! +${bonus}`, '#ffd76a');
             sfx.nearMiss();
+            g.stats.nearMisses++;
           }
         }
         g.meteors = g.meteors.filter(m => meteorPosition(m, g.elapsed).x > -160);
         setMeteors([...g.meteors]);
+      }
+
+      if (w.id === 'supernova' && tier >= 1 && g.elapsed >= g.nextEruptionAt) {
+        g.eruptions.push(createEruption(++g.eruptionId, g.elapsed, playerX, SCREEN_H, g.scrollSpeed * 60));
+        g.nextEruptionAt = g.elapsed + eruptionGap(tier);
+        if (!g.seen.has('eruption')) { g.seen.add('eruption'); showPopup(ERUPTION_INTRO, '#ffffff'); }
+        sfx.eruptionWarn();
+      }
+      if (g.eruptions.length) {
+        for (const e of g.eruptions) {
+          if (!e.launched && eruptionPosition(e, g.elapsed).active) { e.launched = true; sfx.eruption(); }
+          if (!e.close && eruptionNearMiss(e, g.elapsed, playerX, g.playerY, PLAYER_SIZE)) e.close = true;
+        }
+        const hit = g.eruptions.find(e => eruptionHitsPlayer(e, g.elapsed, playerX, g.playerY, PLAYER_SIZE));
+        if (hit && g.shield > 0) {
+          g.shield--;
+          g.eruptions = g.eruptions.filter(e => e !== hit);
+          showPopup('Scudo!', '#9fe3ff');
+          sfx.shield();
+        } else if (hit) {
+          gameOver();
+          return;
+        }
+        for (const e of g.eruptions) {
+          if (e.close && !e.rewarded && eruptionGone(e, g.elapsed, SCREEN_H)) {
+            e.rewarded = true;
+            g.stats.eruptionsDodged++;
+            const bonus = 5 * g.combo.multiplier;
+            g.score += bonus;
+            setScore(g.score);
+            showPopup(`Di un soffio! +${bonus}`, '#ffd76a');
+            sfx.nearMiss();
+          }
+        }
+        g.eruptions = g.eruptions.filter(e => !eruptionGone(e, g.elapsed, SCREEN_H));
+        setEruptions([...g.eruptions]);
       }
 
       if (g.playerY > SCREEN_H + 50 || g.playerY < -50) {
@@ -1501,7 +1634,10 @@ export default function App() {
 
           {platforms.map(p => (
             <React.Fragment key={p.id}>
-              <PlatformBlock x={p.x} y={p.y} w={p.w} colorIdx={p.colorIdx} type={p.type} hitAt={p.hitAt} challenge={p.challenge} onSweep={() => sweepAway(p.id)} asteroidWorld={world.id === 'asteroidi'} />
+              <PlatformBlock x={p.x} y={p.y} w={p.w} colorIdx={p.colorIdx} type={p.type} hitAt={p.hitAt} challenge={p.challenge} onSweep={() => sweepAway(p.id)} asteroidWorld={world.id === 'asteroidi'}
+                ghost={p.type === 'pulsar' && !platformSolid(p, gameRef.current.elapsed)}
+                flicker={p.type === 'pulsar' && pulsarPhase(p, gameRef.current.elapsed) > PULSAR_SOLID - .12 && Math.sin(gameRef.current.elapsed * 40) > 0} />
+              {p.ring && !p.ring.taken && <LightRing x={p.x + p.ring.dx} y={p.ring.y} color={world.accentEmphasis} />}
               {p.hasCollectible && !p.collected && (
                 <CollectibleBlob
                   source={MASCOTS[p.collectibleMascot]}
@@ -1529,6 +1665,7 @@ export default function App() {
             <CollectBurst key={b.id} x={b.x} y={b.y} onDone={() => removeBurst(b.id)} />
           ))}
 
+          {eruptions.length > 0 && <EruptionField eruptions={eruptions} elapsed={gameRef.current.elapsed} height={SCREEN_H} />}
           {meteors.length > 0 && <MeteorField meteors={meteors} elapsed={gameRef.current.elapsed} width={SCREEN_W} />}
           <FlipFlash trigger={flipCount} />
 

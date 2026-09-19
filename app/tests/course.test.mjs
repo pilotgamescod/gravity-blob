@@ -44,8 +44,8 @@ test('mechanics follow a safe introduction and every chunk opens with a recovery
 });
 
 test('chunks are valid and every world has enough of them at each tier', () => {
-  const known = ['n', 'x', 'moving', 'sweep', 'soft', 'boost', 'crumble'];
-  const options = ['item', 'wide', 'narrow', 'short', 'long'];
+  const known = ['n', 'x', 'moving', 'sweep', 'soft', 'boost', 'crumble', 'falling', 'pulsar'];
+  const options = ['item', 'wide', 'narrow', 'short', 'long', 'ring'];
   assert.equal(new Set(CHUNKS.map(c => c.id)).size, CHUNKS.length);
   for (const c of CHUNKS) {
     assert.ok(c.tier >= 0 && c.tier <= MAX_TIER && c.steps.length >= 4, c.id);
@@ -86,7 +86,7 @@ test('asteroids cycle through all four surfaces, other worlds only use their own
   }
   const late = i => 60;
   assert.ok(generate('nebulosa', 42, 844, late).every(p => p.type === 'normal'));
-  assert.ok(generate('buconero', 42, 844, late).every(p => ['normal', 'moving', 'boost'].includes(p.type)));
+  assert.ok(generate('buconero', 42, 844, late).every(p => ['normal', 'moving', 'pulsar', 'boost'].includes(p.type)));
   assert.ok(generate('supernova', 42, 844, late).every(p => ['normal', 'crumble', 'moving', 'boost'].includes(p.type)));
   assert.ok(generate('supernova', 42).every(p => ['normal', 'crumble'].includes(p.type)));
 });

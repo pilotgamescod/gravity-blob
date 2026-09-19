@@ -5,12 +5,21 @@ import { pickMascot } from './mascots.js';
 // mechanics: meccanica → livello da cui il mondo la usa. 'x' nei blocchi pesca fra queste.
 // intro/tierSeconds: secondi prima del livello 1 e durata di ogni livello successivo.
 // tierStep: quanto ogni livello restringe le piattaforme e allunga le distanze.
+// rings: probabilità di un anello di luce in ogni spazio fra due piattaforme.
+// pulsarPeriod: durata di un ciclo acceso/spento delle pulsar (2 battiti della musica del mondo).
 export const RULES = {
-  nebulosa: { label: 'Giardini sospesi', hint: 'Anticipa i cambi di quota · tocca per invertire', mechanics: {}, intro: 10, tierSeconds: 12, tierStep: 16, widthReduction: 10, gapExtra: 10, heightJitter: 40, steepRise: true },
-  asteroidi: { label: 'Isole alla deriva', hint: '', mechanics: { moving: 0, sweep: 0, soft: 0, boost: 0 }, intro: 8, tierSeconds: 15, tierStep: 8 },
-  buconero: { label: 'Orbite instabili', hint: 'Gravità pulsante · schiva le meteore luminose', mechanics: { moving: 1, boost: 3 }, intro: 8, tierSeconds: 15, tierStep: 8 },
-  supernova: { label: 'Scie di fuoco', hint: 'Le piattaforme ⋯ svaniscono al primo tocco', mechanics: { crumble: 0, moving: 2, boost: 3 }, intro: 8, tierSeconds: 15, tierStep: 8 },
+  nebulosa: { label: 'Giardini sospesi', hint: 'Attraversa gli anelli di luce · tocca per invertire', mechanics: {}, intro: 10, tierSeconds: 12, tierStep: 16, widthReduction: 10, gapExtra: 10, heightJitter: 40, steepRise: true, rings: .3 },
+  asteroidi: { label: 'Isole alla deriva', hint: '', mechanics: { moving: 0, sweep: 0, soft: 0, boost: 0, falling: 1 }, intro: 8, tierSeconds: 15, tierStep: 8, rings: .1 },
+  buconero: { label: 'Orbite instabili', hint: 'Le pulsar si spengono a ritmo · schiva le meteore', mechanics: { moving: 1, pulsar: 1, boost: 3 }, intro: 8, tierSeconds: 15, tierStep: 8, rings: .1, pulsarPeriod: 120 / 78 },
+  supernova: { label: 'Scie di fuoco', hint: 'Le piattaforme ⋯ svaniscono · attento alle eruzioni', mechanics: { crumble: 0, moving: 2, boost: 3 }, intro: 8, tierSeconds: 15, tierStep: 8, rings: .1 },
 };
+
+// Rocce cadenti: tremano per FALL_DELAY secondi dopo il primo tocco, poi precipitano.
+export const FALL_DELAY = .3;
+export const FALL_ACCEL = 1100;   // px/s²
+// Pulsar: accese per questa frazione del ciclo.
+export const PULSAR_SOLID = .7;
+export const RING_RADIUS = 26;
 export const MAX_TIER = 4;
 const RECENT_CHUNKS = 3;
 
@@ -19,7 +28,7 @@ export function seededRandom(seed) {
   return () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
 }
 export function createCourse(world, height, seed = Date.now()) {
-  return { world, height, random: seededRandom(seed), index: 0, queue: [], recent: [], lastUsed: {} };
+  return { world, height, random: seededRandom(seed), index: 0, queue: [], recent: [], lastUsed: {}, pulsars: 0 };
 }
 export function courseTier(rules, elapsed = 0) {
   return Math.min(MAX_TIER, Math.max(0, 1 + Math.floor((elapsed - rules.intro) / rules.tierSeconds)));
@@ -104,8 +113,18 @@ export function nextPlatform(course, previous) {
   const maxRise = rules.steepRise && tier >= 2 ? 105 : 85;
   const baseY = Math.max(minY, Math.min(maxY, previous.y + Math.max(-maxRise, Math.min(maxRise, desiredY - previous.y))));
 
+  // Anello di luce nello spazio prima della piattaforma, sopra o sotto il percorso.
+  let ring = null;
+  if (index > 3 && random() < (opts.includes('ring') ? 1 : rules.rings || 0)) {
+    const mid = (previous.y + baseY) / 2;
+    const above = random() < .5;
+    ring = { dx: -gap / 2, y: Math.max(90, Math.min(height - 90, above ? mid - 50 : mid + 66)), taken: false, passed: false };
+  }
+
   return {
-    id: index + 1, x: previous.x + previous.w + gap,
+    id: index + 1, x: previous.x + previous.w + gap, ring,
+    pulsePeriod: type === 'pulsar' ? rules.pulsarPeriod || 1.5 : 0,
+    pulseOffset: type === 'pulsar' ? (course.pulsars++ % 2) * .5 : 0,
     y: baseY, baseY, w, type, amplitude: type === 'moving' ? 18 + difficulty * 12 : 0,
     phase: random() * Math.PI * 2, sector, stage: tier, chunk: course.chunk, recovery, collected: false,
     challenge: course.challengeChunk && !recovery,
@@ -114,7 +133,26 @@ export function nextPlatform(course, previous) {
   };
 }
 export function platformY(platform, elapsed) {
-  return platform.baseY === undefined ? platform.y : platform.baseY + Math.sin(elapsed * 1.4 + platform.phase) * platform.amplitude;
+  if (platform.baseY === undefined) return platform.y;
+  let y = platform.baseY + Math.sin(elapsed * 1.4 + platform.phase) * platform.amplitude;
+  if (platform.fallAt != null) {
+    const d = elapsed - platform.fallAt - FALL_DELAY;
+    y += d > 0 ? .5 * FALL_ACCEL * d * d : Math.sin(elapsed * 70) * 2;
+  }
+  return y;
+}
+export function isFalling(platform, elapsed) {
+  return platform.fallAt != null && elapsed - platform.fallAt > FALL_DELAY;
+}
+// Fase del ciclo di una pulsar, da 0 a 1: accesa sotto PULSAR_SOLID.
+export function pulsarPhase(platform, elapsed) {
+  return (((elapsed / platform.pulsePeriod + platform.pulseOffset) % 1) + 1) % 1;
+}
+// Una piattaforma può essere toccata? fromBelow: il giocatore arriva da sotto (gravità invertita).
+export function platformSolid(platform, elapsed, fromBelow = false) {
+  if (platform.type === 'pulsar') return pulsarPhase(platform, elapsed) < PULSAR_SOLID;
+  if (fromBelow && isFalling(platform, elapsed)) return false;
+  return true;
 }
 export function gravityFactor(worldId, elapsed) {
   return worldId === 'buconero' ? 0.85 + 0.3 * (0.5 + 0.5 * Math.sin(elapsed * 1.2)) : 1;

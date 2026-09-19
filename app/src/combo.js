@@ -61,6 +61,8 @@ export function passCombo(combo, platform) {
   if (platform.passed) return null;
   platform.passed = true;
   if (platform.touched) return null;
+  // Una pulsar può essere spenta proprio mentre ci si passa sopra: saltarla non è un errore.
+  if (platform.type === 'pulsar') return null;
   if (combo.boostGrace) {
     combo.boostGrace = false;
     return null;
