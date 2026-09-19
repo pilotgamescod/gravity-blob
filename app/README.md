@@ -53,6 +53,19 @@ Effetti sintetizzati al momento con la Web Audio API (`src/sound.js`), senza fil
 - Nel menu, in alto a destra: ♪ attiva o spegne la musica, FX gli effetti. Le scelte sono salvate.
 - Nell'app nativa (Expo Go) i suoni non ci sono: le funzioni non fanno nulla senza Web Audio.
 
+## Premi
+
+Trofei vinti giocando, salvati sul dispositivo con la data (`src/trophies.js`). Sono 26, in bronzo (1 stella), argento (2) e oro (3), per un totale di 49 stelle:
+
+- costanza (prima partita, 25 e 100 partite, 1 e 2 minuti in volo, livello 4 in Supernova);
+- combo (10, 30, 60 di fila);
+- mondi (tutti sbloccati, 1.000 punti in Nebulosa, Asteroidi e Buco nero, 1.500 in Supernova);
+- novità dei mondi (5 anelli di fila, 100 anelli in tutto, 15 rocce cadenti o 15 pulsar in una partita, 5 eruzioni sfiorate, 25 meteore sfiorate in tutto);
+- eventi (prima sfida, 15 sfide, 6 eventi in una partita);
+- album (7 mascotte, una leggendaria, album completo).
+
+Le stelle sbloccano le **scie** del personaggio: Eco (sempre), Arcobaleno (5), Lucciole (12), Brace (20), Aurora (30), Oro zecchino (45). La bacheca si apre dalla stella in alto a sinistra nel menu, dal profilo o toccando i nuovi trofei a fine partita. Le statistiche di sempre (partite, secondi, anelli, rocce, pulsar, sfide…) sono salvate insieme ai progressi e servono ai trofei cumulativi.
+
 ## Sblocco dei mondi
 
 Asteroidi si sblocca con 300 punti in Nebulosa, Buco nero con 450 in Asteroidi, Supernova con 600 in Buco nero: con un gioco medio servono circa 30–60 secondi nel mondo precedente, con combo alti meno. Un mondo sbloccato resta sbloccato; i salvataggi precedenti mantengono i mondi aperti con le vecchie soglie (40/60/80).
@@ -88,7 +101,7 @@ Il parametro seed di `createCourse` permette di riprodurre un percorso per debug
 
 ## Verifiche
 
-- `npm test`: riproducibilità, varietà, limiti geometrici su quattro dimensioni, validità dei blocchi, livelli, meccaniche per mondo, combo, passaggi ravvicinati, eventi, tratti sfida, album e rarità delle mascotte e gravità.
+- `npm test`: riproducibilità, varietà, limiti geometrici su quattro dimensioni, validità dei blocchi, livelli, meccaniche per mondo, combo, passaggi ravvicinati, eventi, tratti sfida, album e rarità delle mascotte, nuove meccaniche, musica, trofei e gravità.
 - `npx expo export --platform web --output-dir /tmp/gravity-blob-preview`
 - `npm run test:browser`: richiede Chrome installato e l'export precedente; verifica menu, avvio, morte, riprova e ritorno al menu. Screenshot in `/tmp/gravity-menu.png` e `/tmp/gravity-playing.png`.
 - `npx expo export --platform ios`: verifica il bundle nativo; non sostituisce una prova su iPhone.

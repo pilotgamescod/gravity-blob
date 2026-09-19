@@ -21,6 +21,7 @@ import { DeepSpace, MeteorField } from './src/DeepSpace';
 import { createMeteor, meteorPosition, meteorHitsPlayer, meteorNearMiss } from './src/meteors';
 import { createCombo, landCombo, passCombo, comboProgress, COMBO_STEPS } from './src/combo';
 import { sfx, unlockAudio, setSoundEnabled, setSoundWorld } from './src/sound';
+import { TROPHIES, MEDALS, TRAILS, MAX_STARS, emptyLife, updateLife, evaluateTrophies, totalStars, trailUnlocked } from './src/trophies';
 import { playMusic, stopMusic, setMusicEnabled, setMusicIntensity, setMusicMood } from './src/music';
 import { MASCOT_INFO, RARITY, mascotTraits, mascotNeed, isMascotUnlocked, mascotWorlds, addToAlbum } from './src/mascots';
 import { EVENTS, createDirector, updateDirector, endEvent, eventProgress, LOW_GRAVITY, LOW_GRAVITY_BOUNCE, RUSH_SPEED } from './src/events';
@@ -135,7 +136,7 @@ const WORLDS = [
 const PLAYER_SIZE = 64;
 const PLATFORM_H = 16;
 const COLLECTIBLE_SIZE = 40;
-const TRAIL_LENGTH = 5;
+const TRAIL_LENGTH = 10;   // campioni salvati; la scia Eco ne mostra solo gli ultimi 5
 const GROUND_Y = SCREEN_H - 100;
 const CEILING_Y = 60;
 
@@ -254,12 +255,33 @@ function FloatingBlobs({ scrollOffset }) {
 
 // ── Player trail ──
 
-function PlayerTrail({ positions, gravityDown, mascotSource }) {
+function PlayerTrail({ positions, gravityDown, mascotSource, style = 'eco', speed = 3 }) {
+  const trail = TRAILS.find(t => t.id === style);
+  if (trail?.colors) {
+    // Scie colorate: puntini che restano indietro con lo scorrere del mondo.
+    const n = positions.length;
+    return (
+      <>
+        {positions.map((pos, i) => {
+          const k = (i + 1) / n;
+          const size = 8 + k * 16;
+          const back = (n - 1 - i) * speed * 3;
+          return (
+            <View key={i} pointerEvents="none" style={{
+              position: 'absolute', left: pos.x + PLAYER_SIZE / 2 - back - size / 2 - 10, top: pos.y + PLAYER_SIZE / 2 - size / 2,
+              width: size, height: size, borderRadius: size, opacity: .15 + k * .6,
+              backgroundColor: trail.colors[i % trail.colors.length],
+            }} />
+          );
+        })}
+      </>
+    );
+  }
   return (
     <>
-      {positions.map((pos, i) => {
-        const opacity = ((i + 1) / positions.length) * 0.25;
-        const scale = 0.5 + ((i + 1) / positions.length) * 0.4;
+      {positions.slice(-5).map((pos, i, list) => {
+        const opacity = ((i + 1) / list.length) * 0.25;
+        const scale = 0.5 + ((i + 1) / list.length) * 0.4;
         return (
           <Image key={i} source={mascotSource} style={{
             position: 'absolute',
@@ -573,7 +595,7 @@ function PlatformBlock({ x, y, w, colorIdx, type, hitAt, onSweep, asteroidWorld,
 // ── Start screen (Ride the Wave style) ──
 
 function StartScreen({
-  world, selectedWorldIdx, selectedMascot, worldScores, unlockedWorlds, soundOn, onToggleSound, musicOn, onToggleMusic,
+  world, selectedWorldIdx, selectedMascot, worldScores, unlockedWorlds, soundOn, onToggleSound, musicOn, onToggleMusic, stars, onTrophies,
   onStart, onPrevWorld, onNextWorld, onDotPress,
   onCharacters, onProfile, locked,
 }) {
@@ -598,6 +620,14 @@ function StartScreen({
     <View style={{ flex: 1 }}>
       <LinearGradient colors={world.menuBg} style={StyleSheet.absoluteFill} />
       <MenuDecorations accent={world.accent} world={world} prominent />
+
+      {/* Premi */}
+      <TouchableOpacity onPress={onTrophies} activeOpacity={0.7}
+        accessibilityRole="button" accessibilityLabel="Bacheca dei premi"
+        style={[ms.trophyButton, { borderColor: world.cardBorder, backgroundColor: world.cardBg }]}>
+        <Text style={[ms.trophyStar, { color: MEDALS.oro.color }]}>★</Text>
+        <Text style={[ms.trophyCount, { color: world.textColor }]}>{stars}</Text>
+      </TouchableOpacity>
 
       {/* Music and sound toggles */}
       <View style={ms.soundColumn}>
@@ -856,9 +886,79 @@ function CharacterSelectScreen({ selectedMascot, album, onSelect, onConfirm, onB
   );
 }
 
+// ── Bacheca dei premi ──
+
+function TrophiesScreen({ trophies, stars, trailStyle, onSelectTrail, onBack, world }) {
+  const wonCount = TROPHIES.filter(t => trophies[t.id]).length;
+  const order = ['oro', 'argento', 'bronzo'];
+  return (
+    <View style={{ flex: 1 }}>
+      <LinearGradient colors={[world.menuBg[0], world.menuBg[1]]} style={StyleSheet.absoluteFill} />
+      <MenuDecorations accent={world.accent} world={world} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={cs.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={cs.pageHeader}>
+          <TouchableOpacity onPress={onBack} style={[cs.backButton, { borderColor: world.cardBorder, backgroundColor: world.cardBg }]} activeOpacity={0.6}>
+            <Text style={[cs.backArrow, { color: world.accent }]}>{'‹'}</Text>
+          </TouchableOpacity>
+          <Text style={[cs.pageHeaderLabel, { color: world.eyebrowColor }]}>BACHECA DEI PREMI</Text>
+        </View>
+
+        <Text style={[cs.pageTitle, { color: world.textColor }]}>I tuoi premi</Text>
+        <Text style={[cs.pageSubtitle, { color: world.secondaryText }]}>
+          {wonCount} di {TROPHIES.length} trofei · <Text style={{ color: MEDALS.oro.color, fontWeight: '800' }}>★ {stars}</Text> di {MAX_STARS} stelle
+        </Text>
+
+        {/* Scie */}
+        <Text style={[ts.sectionTitle, { color: world.textColor }]}>Scie</Text>
+        <Text style={[ts.sectionHint, { color: world.secondaryText }]}>Si sbloccano con le stelle dei trofei.</Text>
+        <View style={ts.trailGrid}>
+          {TRAILS.map(t => {
+            const open = stars >= t.stars;
+            const selected = trailStyle === t.id;
+            return (
+              <TouchableOpacity key={t.id} disabled={!open} onPress={() => onSelectTrail(t.id)} activeOpacity={0.7}
+                style={[ts.trailCard, { borderColor: selected ? world.accent : world.cardBorder, borderWidth: selected ? 2 : 1, backgroundColor: selected ? world.accent + '18' : world.cardBg, opacity: open ? 1 : .55 }]}>
+                <View style={ts.trailDots}>
+                  {(t.colors || [world.accent, world.accent, world.accent]).slice(0, 5).map((c, i) => (
+                    <View key={i} style={{ width: 6 + i * 2.5, height: 6 + i * 2.5, borderRadius: 10, backgroundColor: c, opacity: t.colors ? 1 : .25 + i * .2 }} />
+                  ))}
+                </View>
+                <Text style={[ts.trailName, { color: world.textColor }]}>{t.name}</Text>
+                <Text style={[ts.trailCost, { color: open ? world.accent : world.eyebrowColor }]}>{selected ? 'In uso' : open ? 'Scegli' : `★ ${t.stars}`}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Trofei */}
+        <Text style={[ts.sectionTitle, { color: world.textColor }]}>Trofei</Text>
+        {[...TROPHIES].sort((a, b) => (trophies[b.id] ? 1 : 0) - (trophies[a.id] ? 1 : 0) || order.indexOf(a.medal) - order.indexOf(b.medal)).map(t => {
+          const medal = MEDALS[t.medal];
+          const won = trophies[t.id];
+          return (
+            <View key={t.id} style={[ts.row, { backgroundColor: world.cardBg, borderColor: won ? medal.color + '80' : world.cardBorder, opacity: won ? 1 : .6 }]}>
+              <View style={[ts.medal, { backgroundColor: won ? medal.color : 'transparent', borderColor: medal.color }]}>
+                <Text style={[ts.medalStar, { color: won ? '#fff' : medal.color }]}>★</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[ts.rowTitle, { color: world.textColor }]}>{t.title}</Text>
+                <Text style={[ts.rowText, { color: world.secondaryText }]}>{t.description}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[ts.rowStars, { color: medal.color }]}>{'★'.repeat(medal.stars)}</Text>
+                <Text style={[ts.rowDate, { color: world.eyebrowColor }]}>{won ? won.split('-').reverse().join('/') : medal.label}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 // ── Profile screen ──
 
-function ProfileScreen({ selectedMascot, worldScores, unlockedWorlds, bestCombo, album, onBack, onCharacters, world }) {
+function ProfileScreen({ selectedMascot, worldScores, unlockedWorlds, bestCombo, album, trophies, onTrophies, onBack, onCharacters, world }) {
   const totalScore = getTotalScore(worldScores);
   const bestScore = getBestScore(worldScores);
   const completed = getWorldsCompleted(worldScores, unlockedWorlds);
@@ -913,6 +1013,14 @@ function ProfileScreen({ selectedMascot, worldScores, unlockedWorlds, bestCombo,
           </Text>
         </TouchableOpacity>
 
+        <TouchableOpacity onPress={onTrophies} activeOpacity={0.7}
+          style={[ps.albumRow, { backgroundColor: world.cardBg, borderColor: world.cardBorder }]}>
+          <Text style={[ps.worldRowTitle, { color: world.textColor }]}>Premi</Text>
+          <Text style={[ps.worldRowSub, { color: world.secondaryText }]}>
+            {TROPHIES.filter(t => trophies[t.id]).length}/{TROPHIES.length} trofei · <Text style={{ color: MEDALS.oro.color, fontWeight: '800' }}>★ {totalStars(trophies)}</Text>
+          </Text>
+        </TouchableOpacity>
+
         {/* Per-world scores */}
         <Text style={[ps.sectionTitle, { color: world.textColor }]}>Record per mondo</Text>
         {WORLDS.map((w, i) => {
@@ -949,7 +1057,7 @@ function ProfileScreen({ selectedMascot, worldScores, unlockedWorlds, bestCombo,
 
 // ── Game over screen ──
 
-function GameOverScreen({ score, worldHighScore, collected, bestCombo, albumNews, world, selectedMascot, onRestart, onMenu }) {
+function GameOverScreen({ score, worldHighScore, collected, bestCombo, albumNews, trophyNews, onTrophies, world, selectedMascot, onRestart, onMenu }) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 5, tension: 60 }).start();
@@ -990,6 +1098,25 @@ function GameOverScreen({ score, worldHighScore, collected, bestCombo, albumNews
                 ))}
               </View>
             </View>
+          )}
+
+          {trophyNews.length > 0 && (
+            <TouchableOpacity onPress={onTrophies} activeOpacity={0.8}
+              style={[go.newsBox, { borderColor: MEDALS.oro.color + '70', backgroundColor: MEDALS.oro.color + '14' }]}>
+              <Text style={[go.newsTitle, { color: MEDALS.oro.color }]}>
+                {trophyNews.length === 1 ? 'NUOVO TROFEO' : `${trophyNews.length} NUOVI TROFEI`} · +{trophyNews.reduce((sum, id) => sum + MEDALS[TROPHIES.find(t => t.id === id).medal].stars, 0)} ★
+              </Text>
+              {trophyNews.slice(0, 3).map(id => {
+                const t = TROPHIES.find(x => x.id === id);
+                return (
+                  <View key={id} style={go.newsRow}>
+                    <View style={[go.newsMedal, { backgroundColor: MEDALS[t.medal].color }]}><Text style={go.newsMedalStar}>★</Text></View>
+                    <Text style={[go.newsText, { color: world.textColor }]}><Text style={{ fontWeight: '800' }}>{t.title}</Text> · {t.description}</Text>
+                  </View>
+                );
+              })}
+              {trophyNews.length > 3 && <Text style={[go.newsMore, { color: world.secondaryText }]}>e altri {trophyNews.length - 3} · vedi la bacheca</Text>}
+            </TouchableOpacity>
           )}
 
           {albumNews.unlocked.length > 0 && (
@@ -1054,12 +1181,25 @@ export default function App() {
     Object.fromEntries(WORLDS.map(w => [w.id, Number(saved.worldScores?.[w.id]) || 0]))
   );
   const [bestCombo, setBestCombo] = useState(Number(saved.bestCombo) || 0);
+  const [trophies, setTrophies] = useState(() => (saved.trophies && typeof saved.trophies === 'object') ? saved.trophies : {});
+  const [life, setLife] = useState(() => ({ ...emptyLife(), ...(saved.stats || {}) }));
+  const [trailStyle, setTrailStyle] = useState(typeof saved.trail === 'string' ? saved.trail : 'eco');
+  const [trophyNews, setTrophyNews] = useState([]);
+  const [trophiesBack, setTrophiesBack] = useState('menu');
+  const openTrophies = from => { setTrophiesBack(from); setScreen('trophies'); };
+  const trophiesRef = useRef(trophies);
+  trophiesRef.current = trophies;
+  const lifeRef = useRef(life);
+  lifeRef.current = life;
+  const stars = totalStars(trophies);
   const [soundOn, setSoundOn] = useState(saved.sound !== false);
   useEffect(() => { setSoundEnabled(soundOn); }, [soundOn]);
   const [musicOn, setMusicOn] = useState(saved.music !== false);
   useEffect(() => { setMusicEnabled(musicOn); }, [musicOn]);
   const worldScoresRef = useRef(null);
   const [unlockedWorlds, setUnlockedWorlds] = useState(() => initialUnlocked(saved));
+  const unlockedRef = useRef(unlockedWorlds);
+  unlockedRef.current = unlockedWorlds;
   // Un mondo sbloccato resta sbloccato.
   useEffect(() => {
     const now = WORLDS.filter((w, i) => isWorldUnlocked(i, worldScores, unlockedWorlds)).map(w => w.id);
@@ -1075,8 +1215,8 @@ export default function App() {
   }, [screen, selectedWorld]);
   worldScoresRef.current = worldScores;
   useEffect(() => {
-    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo, unlocked: unlockedWorlds, album, sound: soundOn, music: musicOn });
-  }, [worldScores, selectedWorld, selectedMascot, bestCombo, unlockedWorlds, album, soundOn, musicOn]);
+    saveProgress({ worldScores, selectedWorld, selectedMascot, bestCombo, unlocked: unlockedWorlds, album, sound: soundOn, music: musicOn, trophies, stats: life, trail: trailStyle });
+  }, [worldScores, selectedWorld, selectedMascot, bestCombo, unlockedWorlds, album, soundOn, musicOn, trophies, life, trailStyle]);
 
   const [score, setScore] = useState(0);
   const [playerY, setPlayerY] = useState(SCREEN_H * 0.5);
@@ -1147,7 +1287,7 @@ export default function App() {
     g.nextEruptionAt = RULES[w.id].intro + 4;
     g.ringChain = 0;
     g.seen = new Set();
-    g.stats = { rings: 0, rocks: 0, pulsars: 0, eruptionsDodged: 0, nearMisses: 0, challengesWon: 0, events: 0 };
+    g.stats = { rings: 0, ringChain: 0, rocks: 0, pulsars: 0, eruptionsDodged: 0, nearMisses: 0, challengesWon: 0, events: 0, tier: 0 };
     g.onPlatform = false;
     g.trail = [];
     g.totalScroll = 0;
@@ -1224,6 +1364,24 @@ export default function App() {
     setAlbum(result.album);
     setAlbumNews({ firstTime: result.firstTime, unlocked: result.unlocked });
     if (result.unlocked.length) sfx.unlock();
+
+    // Premi: statistiche di sempre aggiornate e trofei appena vinti.
+    const g = gameRef.current;
+    const run = { world: wId, seconds: g.elapsed, bestCombo: g.combo.best, collected: found.length, ...g.stats };
+    const nextLife = updateLife(lifeRef.current, run);
+    lifeRef.current = nextLife;
+    setLife(nextLife);
+    const scoresAfter = { ...worldScoresRef.current, [wId]: Math.max(worldScoresRef.current?.[wId] || 0, finalScore) };
+    const unlockedAfter = WORLDS.filter((w, i) => isWorldUnlocked(i, scoresAfter, unlockedRef.current)).map(w => w.id);
+    const newTrophies = evaluateTrophies({ run, life: nextLife, album: result.album, worldScores: scoresAfter, unlocked: unlockedAfter }, trophiesRef.current);
+    setTrophyNews(newTrophies);
+    if (newTrophies.length) {
+      const today = new Date().toISOString().slice(0, 10);
+      const next = { ...trophiesRef.current, ...Object.fromEntries(newTrophies.map(id => [id, today])) };
+      trophiesRef.current = next;
+      setTrophies(next);
+      setTimeout(() => sfx.trophy(), 900);
+    }
     setScreen('gameover');
   }, []);
 
@@ -1263,7 +1421,7 @@ export default function App() {
       }
       const event = g.director.active;
       const tier = courseTier(RULES[w.id], g.elapsed);
-      if (tier !== g.musicTier) { g.musicTier = tier; setMusicIntensity(tier); }
+      if (tier !== g.musicTier) { g.musicTier = tier; setMusicIntensity(tier); g.stats.tier = Math.max(g.stats.tier, tier); }
       setMusicMood(event ? EVENTS[event.type].kind : null);
       g.scrollSpeed = (w.id === 'nebulosa'
         ? w.scrollSpeed + Math.min(1.5, Math.max(0, g.elapsed - 10) * .055)
@@ -1300,6 +1458,7 @@ export default function App() {
             plat.ring.taken = true;
             g.ringChain++;
             g.stats.rings++;
+            g.stats.ringChain = Math.max(g.stats.ringChain, g.ringChain);
             const bonus = 5 * Math.min(g.ringChain, 5) * g.combo.multiplier;
             g.score += bonus;
             setScore(g.score);
@@ -1557,6 +1716,8 @@ export default function App() {
           onToggleSound={() => { unlockAudio(); setSoundOn(on => !on); }}
           musicOn={musicOn}
           onToggleMusic={() => { unlockAudio(); setMusicOn(on => !on); }}
+          stars={stars}
+          onTrophies={() => openTrophies('menu')}
           locked={locked}
           onStart={startGame}
           onPrevWorld={() => setSelectedWorld(i => Math.max(0, i - 1))}
@@ -1585,6 +1746,22 @@ export default function App() {
     );
   }
 
+  if (screen === 'trophies') {
+    return (
+      <>
+        <StatusBar barStyle="dark-content" />
+        <TrophiesScreen
+          trophies={trophies}
+          stars={stars}
+          trailStyle={trailUnlocked(trailStyle, stars) ? trailStyle : 'eco'}
+          onSelectTrail={id => { sfx.tap(); setTrailStyle(id); }}
+          onBack={() => setScreen(trophiesBack)}
+          world={world}
+        />
+      </>
+    );
+  }
+
   if (screen === 'profile') {
     return (
       <>
@@ -1595,6 +1772,8 @@ export default function App() {
           unlockedWorlds={unlockedWorlds}
           bestCombo={bestCombo}
           album={album}
+          trophies={trophies}
+          onTrophies={() => openTrophies('profile')}
           onBack={() => setScreen('menu')}
           onCharacters={() => setScreen('characters')}
           world={world}
@@ -1613,6 +1792,8 @@ export default function App() {
           collected={collected}
           bestCombo={gameRef.current.combo?.best || 0}
           albumNews={albumNews}
+          trophyNews={trophyNews}
+          onTrophies={() => openTrophies('gameover')}
           world={world}
           selectedMascot={selectedMascot}
           onRestart={startGame}
@@ -1648,7 +1829,7 @@ export default function App() {
             </React.Fragment>
           ))}
 
-          <PlayerTrail positions={trail} gravityDown={gravityDown} mascotSource={MASCOTS[selectedMascot]} />
+          <PlayerTrail positions={trail} gravityDown={gravityDown} mascotSource={MASCOTS[selectedMascot]} style={trailUnlocked(trailStyle, stars) ? trailStyle : 'eco'} speed={gameRef.current.scrollSpeed || 3} />
 
           <Animated.View style={[gs.playerContainer, {
             left: playerX, top: playerY,
@@ -1711,6 +1892,13 @@ export default function App() {
 // ── Menu styles ──
 
 const ms = StyleSheet.create({
+  trophyButton: {
+    position: 'absolute', top: Platform.OS === 'ios' ? 56 : 34, left: 20, zIndex: 6,
+    height: 40, minWidth: 40, paddingHorizontal: 12, borderRadius: 20, borderWidth: 1,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+  },
+  trophyStar: { fontSize: 16, fontWeight: '900' },
+  trophyCount: { fontSize: 13, fontWeight: '800' },
   soundColumn: { position: 'absolute', top: Platform.OS === 'ios' ? 56 : 34, right: 20, zIndex: 6, gap: 8 },
   soundButton: {
     width: 40, height: 40, borderRadius: 20, borderWidth: 1,
@@ -1832,6 +2020,25 @@ const cs = StyleSheet.create({
   },
 });
 
+// ── Trophies styles ──
+
+const ts = StyleSheet.create({
+  sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5, marginTop: 26 },
+  sectionHint: { fontSize: 12, marginTop: 3, marginBottom: 12 },
+  trailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  trailCard: { width: (SCREEN_W - 48 - 20) / 3, borderRadius: 18, paddingVertical: 12, alignItems: 'center' },
+  trailDots: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 20 },
+  trailName: { fontSize: 11, fontWeight: '700', marginTop: 6 },
+  trailCost: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 18, padding: 12, marginTop: 8 },
+  medal: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  medalStar: { fontSize: 17, fontWeight: '900', marginTop: -1 },
+  rowTitle: { fontSize: 14, fontWeight: '800' },
+  rowText: { fontSize: 12, marginTop: 2, lineHeight: 16 },
+  rowStars: { fontSize: 11, letterSpacing: 1 },
+  rowDate: { fontSize: 9, marginTop: 3, fontWeight: '600' },
+});
+
 // ── Profile styles ──
 
 const ps = StyleSheet.create({
@@ -1901,6 +2108,9 @@ const go = StyleSheet.create({
   newsTitle: { fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6, textAlign: 'center' },
   newsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   newsIcon: { width: 28, height: 28, resizeMode: 'contain' },
+  newsMedal: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  newsMedalStar: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  newsMore: { fontSize: 11, marginTop: 6, textAlign: 'center' },
   newsText: { fontSize: 13, flexShrink: 1 },
   collectedArea: { alignItems: 'center', marginTop: 16 },
   collectedLabel: { fontSize: 12, letterSpacing: 1, marginBottom: 8 },

@@ -277,6 +277,11 @@ export const sfx = {
     noise({ dur: .4, vol: .14, freq: 400, to: 3000, filter: 'bandpass', q: 1.2 });
     tone({ freq: 90, to: 260, type: 'sawtooth', dur: .25, vol: .05 });
   },
+  trophy() {
+    if (!ready('trophy', .5)) return;
+    [0, 7, 12, 16, 19, 24].forEach((n, i) => tone({ freq: semis(659.25, n), type: 'triangle', dur: .3, vol: .1, delay: i * .07 }));
+    noise({ dur: .6, vol: .04, freq: 6000, to: 9000, filter: 'highpass', delay: .3 });
+  },
   tap() {
     if (!ready('tap', .05)) return;
     tone({ freq: 660, to: 520, type: 'sine', dur: .06, vol: .08 });
